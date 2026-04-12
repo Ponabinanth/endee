@@ -7,14 +7,15 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "InsightForge"))
+    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "TalentForge AI"))
     endee_base_url: str = field(
         default_factory=lambda: os.getenv("ENDEE_BASE_URL", "http://localhost:8080/api/v1")
     )
     endee_index_name: str = field(
-        default_factory=lambda: os.getenv("ENDEE_INDEX_NAME", "insightforge_knowledge")
+        default_factory=lambda: os.getenv("ENDEE_INDEX_NAME", "talentforge_hiring")
     )
     endee_auth_token: str = field(default_factory=lambda: os.getenv("ENDEE_AUTH_TOKEN", ""))
+    vector_store_backend: str = field(default_factory=lambda: os.getenv("VECTOR_STORE_BACKEND", "auto"))
     embedding_model: str = field(
         default_factory=lambda: os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     )
@@ -28,4 +29,3 @@ class Settings:
 
 def load_settings() -> Settings:
     return Settings()
-

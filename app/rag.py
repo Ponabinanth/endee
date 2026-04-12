@@ -78,7 +78,7 @@ def build_context(hits: list[dict[str, Any]]) -> str:
             "\n".join(
                 [
                     f"[{index}] {hit['title']} ({hit['source']})",
-                    f"Department: {hit['department']} | Doc Type: {hit['doc_type']} | Audience: {hit['audience']}",
+                    f"Role: {hit['department']} | Record Type: {hit['doc_type']} | Location: {hit['audience']}",
                     hit["text"],
                 ]
             )
@@ -126,7 +126,7 @@ def extractive_answer(question: str, hits: list[dict[str, Any]]) -> dict[str, An
     if not selected:
         return {
             "mode": "extractive",
-            "answer": "I could not find enough grounded context to answer that question.",
+            "answer": "I could not find enough grounded candidate context to answer that question.",
             "citations": [],
             "context": "",
             "raw": {"reason": "no_hits"},
@@ -175,7 +175,7 @@ def openai_answer(question: str, hits: list[dict[str, Any]], *, api_key: str, mo
         client = OpenAI(api_key=api_key)
         context = build_context(hits)
         system_message = (
-            "You are InsightForge, a retrieval-grounded assistant. "
+            "You are TalentForge AI, a retrieval-grounded hiring assistant. "
             "Answer only from the provided context. "
             "Cite sources using bracketed labels like [1] or [2]. "
             "If the context is insufficient, say so clearly."
@@ -215,4 +215,3 @@ def openai_answer(question: str, hits: list[dict[str, Any]], *, api_key: str, mo
         fallback["mode"] = "extractive_fallback"
         fallback["raw"] = {**fallback.get("raw", {}), "llm_error": str(exc), "model": model}
         return fallback
-

@@ -1,130 +1,195 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from app.filters import dedupe_sorted
+from app.scoring import CandidateProfile, JobRole
 
 
-@dataclass(frozen=True)
-class SeedDocument:
-    id: str
-    title: str
-    department: str
-    doc_type: str
-    audience: str
-    source: str
-    body: str
+SAMPLE_CANDIDATES: list[CandidateProfile] = [
+    CandidateProfile(
+        id="candidate-priya-shah",
+        name="Priya Shah",
+        headline="Senior AI Engineer focused on semantic search and LLM systems",
+        years_experience=6.5,
+        location="Bengaluru, India",
+        target_role="AI Engineer",
+        skills=("Python", "FastAPI", "embeddings", "vector databases", "PyTorch", "Docker", "AWS", "LLMs"),
+        resume_text="""
+Senior AI engineer who built a semantic search stack for an internal support knowledge base.
+Delivered resume matching experiments using embeddings, vector similarity, and evaluation loops.
+Shipped production services in Python and FastAPI, containerized workloads with Docker, and deployed on AWS.
+Led retrieval experiments, prompt tuning, and search quality reviews with product and recruiting teams.
+""".strip(),
+        source="sample-resumes/priya-shah.txt",
+        summary="Strong at semantic search, retrieval workflows, and production API delivery.",
+        projects=("Semantic Search Engine", "Resume Matcher", "LLM Evaluation Dashboard"),
+    ),
+    CandidateProfile(
+        id="candidate-daniel-kim",
+        name="Daniel Kim",
+        headline="Backend engineer with strong API, database, and platform skills",
+        years_experience=4.2,
+        location="Singapore",
+        target_role="Backend Engineer",
+        skills=("Python", "PostgreSQL", "Redis", "FastAPI", "Docker", "System design", "Testing"),
+        resume_text="""
+Backend engineer who owns REST APIs, data models, and observability for product teams.
+Built performant services in Python, tuned PostgreSQL queries, and implemented caching with Redis.
+Comfortable with test-driven development, service contracts, and deployment pipelines.
+""".strip(),
+        source="sample-resumes/daniel-kim.txt",
+        summary="Great fit for backend-heavy roles that need reliability and clean APIs.",
+        projects=("Internal API Platform", "Caching Layer", "Release Automation"),
+    ),
+    CandidateProfile(
+        id="candidate-aisha-rahman",
+        name="Aisha Rahman",
+        headline="Data scientist focused on experimentation and decision support",
+        years_experience=5.1,
+        location="Remote",
+        target_role="Data Scientist",
+        skills=("Python", "SQL", "machine learning", "A/B testing", "XGBoost", "statistics", "dashboards"),
+        resume_text="""
+Data scientist who works closely with product and recruiting teams to translate messy data into decisions.
+Built candidate funnel dashboards, model scoring experiments, and feature engineering pipelines.
+Strong in SQL, experimentation, and communicating findings clearly to non-technical stakeholders.
+""".strip(),
+        source="sample-resumes/aisha-rahman.txt",
+        summary="Balances analytics depth with clear communication and experiment design.",
+        projects=("Candidate Funnel Dashboard", "Experimentation Toolkit", "Predictive Scoring Model"),
+    ),
+    CandidateProfile(
+        id="candidate-miguel-torres",
+        name="Miguel Torres",
+        headline="Full-stack engineer bridging frontends, APIs, and product design",
+        years_experience=3.4,
+        location="Mexico City",
+        target_role="Full Stack Engineer",
+        skills=("React", "Next.js", "Node.js", "Python", "REST APIs", "Testing", "UX"),
+        resume_text="""
+Full-stack engineer who builds product experiences end to end.
+Delivered dashboards, form flows, and API integrations with React, Next.js, Node.js, and Python services.
+Comfortable collaborating with designers, writing tests, and shipping fast iterations.
+""".strip(),
+        source="sample-resumes/miguel-torres.txt",
+        summary="Flexible builder for product-facing software teams.",
+        projects=("Candidate Dashboard", "Interview UI", "Workflow Builder"),
+    ),
+    CandidateProfile(
+        id="candidate-lena-novak",
+        name="Lena Novak",
+        headline="Applied NLP engineer with strong evaluation and retrieval experience",
+        years_experience=7.0,
+        location="Berlin, Germany",
+        target_role="ML Engineer",
+        skills=("Python", "HuggingFace", "transformers", "semantic search", "LLMs", "evaluation", "MLOps"),
+        resume_text="""
+Applied NLP engineer who built retrieval-augmented assistants, semantic ranking pipelines, and model evaluation loops.
+Deep experience with Hugging Face transformers, prompt design, and search relevance analysis.
+Partnered with recruiters to explain ranking decisions and improve candidate matching quality.
+""".strip(),
+        source="sample-resumes/lena-novak.txt",
+        summary="Ideal for retrieval-heavy ML roles and explainable AI systems.",
+        projects=("RAG Interview Copilot", "Semantic Ranker", "Evaluation Harness"),
+    ),
+    CandidateProfile(
+        id="candidate-jordan-lee",
+        name="Jordan Lee",
+        headline="Quality and fraud analytics engineer with anomaly detection experience",
+        years_experience=4.8,
+        location="Austin, USA",
+        target_role="QA / Fraud Analytics",
+        skills=("Python", "Playwright", "Selenium", "anomaly detection", "monitoring", "dashboards", "fraud analytics"),
+        resume_text="""
+Quality engineer and fraud analytics specialist who builds safe assessment flows.
+Implemented browser behavior tracking, anomaly detection dashboards, and test automation.
+Useful for teams that need strong integrity signals in online assessments and interviews.
+""".strip(),
+        source="sample-resumes/jordan-lee.txt",
+        summary="Strong match for fraud detection, QA automation, and assessment integrity.",
+        projects=("Assessment Integrity Engine", "Browser Telemetry Monitor", "Automation Suite"),
+    ),
+]
 
 
-SAMPLE_DOCUMENTS: list[SeedDocument] = [
-    SeedDocument(
-        id="engineering-release-process",
-        title="Engineering Release Process",
+SAMPLE_JOBS: list[JobRole] = [
+    JobRole(
+        id="job-senior-ai-engineer",
+        title="Senior AI Engineer",
         department="engineering",
-        doc_type="runbook",
-        audience="internal",
-        source="knowledge-base/engineering/release-process.md",
-        body="""
-Release Readiness
-
-Every production release begins with a short readiness review. The owner verifies unit tests, integration tests, security scans, and migration plans. If the change touches user-facing flows, the team schedules a canary on 10 percent of traffic for at least 30 minutes. The release captain watches error rates, latency, and critical funnel events before approving full rollout.
-
-Rollback is part of the release, not an afterthought. Before the deployment window, the engineer must write the rollback command, confirm that the previous artifact is available, and rehearse the rollback in staging. If a release causes a critical alert, stop the rollout, page the on-call engineer, and post a status update within 15 minutes.
-
-Postmortems are blameless. The follow-up should explain what happened, how customer impact was minimized, which alert should have fired sooner, and which checklist item needs to change. The goal is fewer surprises in the next release, not blame.
+        location="Remote",
+        min_years_experience=5,
+        must_have_skills=("Python", "embeddings", "vector databases", "FastAPI", "LLMs"),
+        nice_to_have_skills=("PyTorch", "AWS", "Docker", "evaluation"),
+        description="""
+Build the ranking and interview intelligence layer for an autonomous hiring platform.
+The role needs someone who can design semantic matching systems, create explainable scoring, and ship fast APIs.
+Production Python experience, retrieval workflows, and a strong sense for evaluation quality are essential.
 """.strip(),
+        interview_focus=("retrieval quality", "system design", "evaluation", "explainability"),
+        source="jobs/senior-ai-engineer.md",
     ),
-    SeedDocument(
-        id="support-escalation-playbook",
-        title="Support Escalation Playbook",
-        department="support",
-        doc_type="playbook",
-        audience="internal",
-        source="knowledge-base/support/escalation-playbook.md",
-        body="""
-Ticket Triage
-
-Support agents triage new tickets in the order they arrive. Sev1 issues get a first response within 10 minutes during business hours, while Sev2 issues receive a response within one hour. Each ticket should include the customer name, product area, severity, and a short summary of the issue.
-
-Escalate to engineering only after the support agent has reproduced the problem, collected logs, and documented the exact user impact. For outages or data loss, page the on-call engineer and update the incident channel immediately. The support lead owns communication with the customer, while engineering owns the technical fix.
-
-Use calm, specific language. If the customer is frustrated, acknowledge the impact first, explain the next step, and give an ETA you can defend. When the incident is resolved, close the loop with a short summary, the root cause, and any workaround that should stay in the knowledge base.
+    JobRole(
+        id="job-backend-platform-engineer",
+        title="Backend Platform Engineer",
+        department="engineering",
+        location="Remote",
+        min_years_experience=4,
+        must_have_skills=("Python", "FastAPI", "PostgreSQL", "Docker"),
+        nice_to_have_skills=("Redis", "testing", "observability", "system design"),
+        description="""
+Own APIs, data contracts, and deployment quality for the hiring platform.
+Candidates should be able to build reliable services, model workflows, and support product teams with low-latency APIs.
 """.strip(),
+        interview_focus=("API design", "database modeling", "observability", "testing"),
+        source="jobs/backend-platform-engineer.md",
     ),
-    SeedDocument(
-        id="product-faq",
-        title="Product FAQ",
-        department="product",
-        doc_type="faq",
-        audience="customer",
-        source="knowledge-base/product/customer-faq.md",
-        body="""
-What does the product do?
-
-The platform helps teams search internal knowledge, retrieve relevant passages, and draft grounded answers with citations. It is designed for support centers, operations teams, and product organizations that need accurate answers from their own documents instead of a generic web search result.
-
-How do integrations work?
-
-The fastest path is to connect your existing docs, then ingest markdown, text, or exported help-center content. Teams usually start with a small corpus, validate retrieval quality, and then expand to additional sources such as onboarding guides, policy documents, and runbooks. Authentication and access controls can be layered on top of the retrieval layer.
-
-What about data security?
-
-Customer content is stored in your own Endee instance, which means retrieval stays under your control. The app can be run locally or in Docker, and the retrieval layer supports metadata filters so sensitive content can be separated by department, audience, or document type.
+    JobRole(
+        id="job-ml-ranking-scientist",
+        title="ML Ranking Scientist",
+        department="data",
+        location="Remote",
+        min_years_experience=4,
+        must_have_skills=("Python", "machine learning", "statistics", "evaluation"),
+        nice_to_have_skills=("A/B testing", "SQL", "experiment design", "dashboards"),
+        description="""
+Tune the ranking model, explain scores to recruiters, and improve matching quality.
+This role blends product analytics, ranking evaluation, and practical ML system thinking.
 """.strip(),
+        interview_focus=("ranking evaluation", "experiment design", "metrics", "communication"),
+        source="jobs/ml-ranking-scientist.md",
     ),
-    SeedDocument(
-        id="sales-objection-handling",
-        title="Sales Objection Handling",
-        department="sales",
-        doc_type="guide",
-        audience="internal",
-        source="knowledge-base/sales/objection-handling.md",
-        body="""
-Positioning
-
-When a prospect says the tool is "just another chatbot," respond by shifting the conversation to retrieval quality, citations, and workflow fit. The value is not random text generation. The value is giving people the exact passage they need, ranked by semantic relevance, with filterable metadata and a clean path to a grounded answer.
-
-Price objections are usually implementation objections in disguise. Explain that the first demo can be a small pilot: one department, a handful of documents, and a single measurable success metric such as time saved per ticket or faster onboarding for new hires. Once the pilot shows value, the customer can expand to more content and more workflows.
-
-Security objections should be answered with concrete controls. Talk about private deployment, metadata filtering, and the ability to keep the data in the customer-controlled Endee instance. If procurement wants a technical summary, share the architecture and the exact data flow from ingestion to retrieval to answer synthesis.
+    JobRole(
+        id="job-fraud-detection-analyst",
+        title="Fraud Detection Analyst",
+        department="security",
+        location="Hybrid",
+        min_years_experience=3,
+        must_have_skills=("Python", "monitoring", "anomaly detection", "dashboards"),
+        nice_to_have_skills=("Playwright", "Selenium", "fraud analytics", "behavioral analysis"),
+        description="""
+Monitor interview integrity and surface suspicious assessment patterns.
+You will review browser telemetry, copy-paste signals, and camera review flags so the hiring process stays trustworthy.
 """.strip(),
-    ),
-    SeedDocument(
-        id="people-ops-policy",
-        title="People Ops Policy",
-        department="people",
-        doc_type="policy",
-        audience="internal",
-        source="knowledge-base/people/people-ops-policy.md",
-        body="""
-Working Model
-
-Employees may work remotely unless their role requires a physical presence for customer events, hardware handling, or security-sensitive operations. Core collaboration hours are 10:00 to 15:00 local time, and teams should document when they will be offline for travel or personal appointments.
-
-Time Off
-
-Vacation requests should be submitted in advance so managers can plan coverage. If a team member is unexpectedly unavailable, the manager should confirm whether deadlines need to move and whether another owner can cover critical work. For leave longer than three days, a short handoff note is required so no one has to guess where the work stands.
-
-Security and Onboarding
-
-New hires receive access in stages. Start with the tools they need for their role, then add sensitive systems after training is complete. Passwords should be managed through the company-approved password manager, and confidential documents should only be shared with the audience they are intended for.
-""".strip(),
+        interview_focus=("behavioral signals", "telemetry", "investigation", "reporting"),
+        source="jobs/fraud-detection-analyst.md",
     ),
 ]
 
 
 def filter_catalog() -> dict[str, list[str]]:
     return {
-        "departments": sorted({doc.department for doc in SAMPLE_DOCUMENTS}),
-        "doc_types": sorted({doc.doc_type for doc in SAMPLE_DOCUMENTS}),
-        "audiences": sorted({doc.audience for doc in SAMPLE_DOCUMENTS}),
+        "roles": dedupe_sorted(job.title for job in SAMPLE_JOBS),
+        "locations": dedupe_sorted(candidate.location for candidate in SAMPLE_CANDIDATES),
+        "stages": dedupe_sorted(candidate.stage for candidate in SAMPLE_CANDIDATES),
+        "skills": dedupe_sorted(skill for candidate in SAMPLE_CANDIDATES for skill in candidate.skills),
     }
 
 
 def example_questions() -> list[str]:
     return [
-        "What is the rollback process for a production release?",
-        "How should support handle a Sev1 incident?",
-        "How do I explain the product's security model to a customer?",
-        "What is the remote work policy?",
-        "What should I say when a prospect worries about price?",
+        "Rank these resumes for a senior AI engineer role.",
+        "Which candidates have Python, ML, and 2+ years of experience?",
+        "Generate interview questions for the best NLP candidate.",
+        "Show fraud signals for the current interview session.",
+        "What resume improvements would help a backend engineer get shortlisted?",
     ]
-

@@ -15,69 +15,123 @@
   <div class="app-shell">
     <header class="hero panel">
       <div class="hero-copy">
-        <div class="eyebrow">Endee-powered knowledge retrieval</div>
+        <div class="eyebrow">Endee-powered autonomous hiring</div>
         <h1>{{ app_name }}</h1>
         <p class="hero-subtitle">
-          Semantic search, cited RAG answers, and related-document recommendations for an internal knowledge base.
+          Screen resumes semantically, rank candidates with explainable AI, generate interview questions, and surface fraud signals in one command center.
         </p>
         <div class="hero-actions">
-          <button class="button button-primary" type="button" id="sample-question-button">
-            Try a sample question
-          </button>
-          <button class="button button-secondary" type="button" id="refresh-button">
-            Refresh status
-          </button>
+          <button class="button button-primary" type="button" id="sample-prompt-button">Load sample prompt</button>
+          <button class="button button-secondary" type="button" id="refresh-button">Refresh status</button>
+          <button class="button button-ghost" type="button" id="reset-session-button">Reset interview session</button>
         </div>
-        <div id="status-pill" class="status-pill status-pending">Checking Endee...</div>
+        <div id="status-pill" class="status-pill status-pending">Checking vector store...</div>
       </div>
 
       <div class="hero-metrics">
         <div class="metric-card">
-          <span class="metric-label">Index</span>
-          <strong id="metric-index">{{ status.index_name }}</strong>
-          <span class="metric-caption">Cosine + INT8 on Endee</span>
+          <span class="metric-label">Vector store</span>
+          <strong id="metric-vector">{{ status.vector_store_backend }}</strong>
+          <span class="metric-caption" id="metric-index">{{ status.index_name }}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Embedding</span>
+          <span class="metric-label">Embedding backend</span>
           <strong id="metric-backend">{{ status.embedding_backend }}</strong>
           <span class="metric-caption" id="metric-model">{{ status.embedding_model }}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Corpus</span>
-          <strong id="metric-corpus">{{ status.sample_documents }}</strong>
-          <span class="metric-caption"><span id="metric-chunks">{{ status.sample_chunks }}</span> indexed chunks</span>
+          <span class="metric-label">Seeded corpus</span>
+          <strong><span id="metric-candidates">{{ status.sample_candidates }}</span> candidates</strong>
+          <span class="metric-caption"><span id="metric-jobs">{{ status.sample_jobs }}</span> job roles indexed</span>
         </div>
       </div>
     </header>
 
     <main class="dashboard">
-      <section class="panel control-panel">
+      <section class="panel intake-panel">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Search and retrieval</p>
-            <h2>Semantic search</h2>
+            <p class="section-kicker">Candidate intake</p>
+            <h2>Upload and enrich a resume</h2>
           </div>
-          <span class="section-badge">Endee filters</span>
+          <span class="section-badge">TXT / MD resumes</span>
+        </div>
+
+        <form id="upload-form" class="form-stack">
+          <label class="field">
+            <span>Resume files</span>
+            <input id="upload-files" name="files" type="file" accept=".txt,.md,.markdown" multiple>
+          </label>
+
+          <div class="detail-grid">
+            <label class="field">
+              <span>Candidate name</span>
+              <input id="candidate-name" name="candidate_name" type="text" placeholder="Priya Shah">
+            </label>
+            <label class="field">
+              <span>Target role</span>
+              <input id="candidate-target-role" name="target_role" type="text" placeholder="Senior AI Engineer">
+            </label>
+            <label class="field">
+              <span>Years of experience</span>
+              <input id="candidate-years" name="years_experience" type="number" min="0" max="50" step="0.1" value="3.0">
+            </label>
+            <label class="field">
+              <span>Location</span>
+              <input id="candidate-location" name="location" type="text" value="Remote">
+            </label>
+            <label class="field">
+              <span>Skills, comma separated</span>
+              <input id="candidate-skills" name="skills" type="text" placeholder="Python, embeddings, FastAPI">
+            </label>
+            <label class="field">
+              <span>Stage</span>
+              <select id="candidate-stage" name="stage"></select>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Source prefix</span>
+            <input id="upload-source-prefix" name="source_prefix" type="text" value="candidates">
+          </label>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit">Upload and index</button>
+          </div>
+        </form>
+
+        <div id="feedback-output" class="answer-output empty-state">
+          Upload a resume and then use the interview lab to generate tailored resume suggestions.
+        </div>
+      </section>
+
+      <section class="panel search-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Semantic search</p>
+            <h2>Find candidates by meaning, not keywords</h2>
+          </div>
+          <span class="section-badge">Endee similarity</span>
         </div>
 
         <form id="search-form" class="form-stack">
           <label class="field">
-            <span>Query</span>
-            <input id="search-query" name="query" type="text" placeholder="Ask about rollbacks, support, policy, or pricing...">
+            <span>Search query</span>
+            <input id="search-query" name="query" type="text" placeholder="Python developer with ML and 2 years experience">
           </label>
 
-          <div class="filter-grid">
+          <div class="detail-grid">
             <label class="field">
-              <span>Department</span>
-              <select id="search-department" name="department"></select>
+              <span>Role filter</span>
+              <select id="search-role" name="role"></select>
             </label>
             <label class="field">
-              <span>Document type</span>
-              <select id="search-doc-type" name="doc_type"></select>
+              <span>Location filter</span>
+              <select id="search-location" name="location"></select>
             </label>
             <label class="field">
-              <span>Audience</span>
-              <select id="search-audience" name="audience"></select>
+              <span>Stage filter</span>
+              <select id="search-stage" name="stage"></select>
             </label>
             <label class="field">
               <span>Top K</span>
@@ -92,38 +146,179 @@
 
           <div class="form-actions">
             <button class="button button-primary" type="submit">Search</button>
+            <button class="button button-secondary" type="button" id="use-search-query">Use in explainability</button>
             <button class="button button-ghost" type="button" id="clear-search">Clear</button>
           </div>
         </form>
       </section>
 
-      <section class="panel answer-panel">
+      <section class="panel rank-panel">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Grounded synthesis</p>
-            <h2>RAG answer</h2>
+            <p class="section-kicker">Role design</p>
+            <h2>Create a job and rank candidates</h2>
           </div>
-          <span class="section-badge">Cited output</span>
+          <span class="section-badge">Explainable scores</span>
+        </div>
+
+        <form id="job-form" class="form-stack">
+          <div class="detail-grid">
+            <label class="field">
+              <span>Job title</span>
+              <input id="job-title" name="title" type="text" placeholder="Senior AI Engineer" value="Senior AI Engineer">
+            </label>
+            <label class="field">
+              <span>Department</span>
+              <input id="job-department" name="department" type="text" value="engineering">
+            </label>
+            <label class="field">
+              <span>Location</span>
+              <input id="job-location" name="location" type="text" value="Remote">
+            </label>
+            <label class="field">
+              <span>Minimum years</span>
+              <input id="job-min-years" name="min_years_experience" type="number" min="0" max="50" step="0.5" value="5">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Job description</span>
+            <textarea id="job-description" name="description" rows="4" placeholder="Describe the role, team, and outcomes...">Build the ranking and interview intelligence layer for an autonomous hiring platform. The role needs someone who can design semantic matching systems, create explainable scoring, and ship fast APIs.</textarea>
+          </label>
+
+          <div class="detail-grid">
+            <label class="field">
+              <span>Must-have skills</span>
+              <textarea id="job-must-have" name="must_have_skills" rows="3" placeholder="Python, FastAPI, embeddings, vector databases, LLMs">Python, embeddings, vector databases, FastAPI, LLMs</textarea>
+            </label>
+            <label class="field">
+              <span>Nice-to-have skills</span>
+              <textarea id="job-nice-to-have" name="nice_to_have_skills" rows="3" placeholder="PyTorch, AWS, Docker, evaluation">PyTorch, AWS, Docker, evaluation</textarea>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Interview focus</span>
+            <input id="job-focus" name="interview_focus" type="text" placeholder="retrieval quality, explainability, evaluation" value="retrieval quality, explainability, evaluation">
+          </label>
+
+          <div class="form-actions">
+            <button class="button button-secondary" type="button" id="create-job-button">Create role</button>
+            <button class="button button-primary" type="button" id="rank-button">Rank candidates</button>
+          </div>
+        </form>
+
+        <div id="rank-results" class="results-list empty-state">
+          Rank a role to see explainable candidate scores.
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Search results</p>
+            <h2>Semantic candidate matches</h2>
+          </div>
+          <span class="section-badge" id="results-count">0 results</span>
+        </div>
+        <div id="search-results" class="results-list empty-state">
+          Run a search to surface the strongest resumes from Endee.
+        </div>
+      </section>
+
+      <section class="panel related-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Recommendations</p>
+            <h2>Similar candidates</h2>
+          </div>
+          <span class="section-badge">Vector proximity</span>
+        </div>
+        <div id="related-results" class="results-list empty-state">
+          Select a candidate to discover similar profiles.
+        </div>
+      </section>
+
+      <section class="panel interview-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Interview lab</p>
+            <h2>Generate, evaluate, and flag fraud</h2>
+          </div>
+          <span class="section-badge">Adaptive questions</span>
+        </div>
+
+        <div class="detail-grid">
+          <label class="field">
+            <span>Candidate</span>
+            <select id="interview-candidate"></select>
+          </label>
+          <label class="field">
+            <span>Job role</span>
+            <select id="interview-job"></select>
+          </label>
+          <label class="field">
+            <span>Questions</span>
+            <input id="interview-count" name="interview_count" type="range" min="3" max="8" value="5">
+            <div class="range-labels">
+              <span>3</span>
+              <span id="interview-count-value">5</span>
+              <span>8</span>
+            </div>
+          </label>
+          <label class="field checkbox-field">
+            <span>Vision review</span>
+            <label class="checkbox-inline">
+              <input id="multiple-faces" type="checkbox">
+              <span>Multiple faces detected</span>
+            </label>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="button" id="generate-interview-button">Generate questions</button>
+          <button class="button button-secondary" type="button" id="evaluate-interview-button">Evaluate answers</button>
+          <button class="button button-ghost" type="button" id="resume-feedback-button">Resume feedback</button>
+          <button class="button button-ghost" type="button" id="fraud-check-button">Check fraud</button>
+          <button class="button button-ghost" type="button" id="reset-interview-button">Reset</button>
+        </div>
+
+        <div id="telemetry-panel" class="telemetry-grid"></div>
+        <div id="interview-questions" class="question-list empty-state">
+          Generate interview questions to unlock adaptive scoring.
+        </div>
+        <div id="interview-result" class="answer-output empty-state">
+          Interview scores and fraud signals will appear here.
+        </div>
+      </section>
+
+      <section class="panel explain-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Explainable AI</p>
+            <h2>Grounded answers for recruiters</h2>
+          </div>
+          <span class="section-badge">RAG output</span>
         </div>
 
         <form id="answer-form" class="form-stack">
           <label class="field">
             <span>Question</span>
-            <textarea id="answer-question" name="question" rows="4" placeholder="What is the rollback process for a production release?"></textarea>
+            <textarea id="answer-question" name="question" rows="4" placeholder="Why did Priya rank higher than the other AI engineers?"></textarea>
           </label>
 
-          <div class="filter-grid">
+          <div class="detail-grid">
             <label class="field">
-              <span>Department</span>
-              <select id="answer-department" name="department"></select>
+              <span>Role filter</span>
+              <select id="answer-role" name="role"></select>
             </label>
             <label class="field">
-              <span>Document type</span>
-              <select id="answer-doc-type" name="doc_type"></select>
+              <span>Location filter</span>
+              <select id="answer-location" name="location"></select>
             </label>
             <label class="field">
-              <span>Audience</span>
-              <select id="answer-audience" name="audience"></select>
+              <span>Stage filter</span>
+              <select id="answer-stage" name="stage"></select>
             </label>
             <label class="field">
               <span>Top K</span>
@@ -137,94 +332,23 @@
           </div>
 
           <div class="form-actions">
-            <button class="button button-primary" type="submit">Generate answer</button>
-            <button class="button button-ghost" type="button" id="use-search-query">Use search query</button>
+            <button class="button button-primary" type="submit">Ask model</button>
+            <button class="button button-secondary" type="button" id="use-search-query">Use search query</button>
           </div>
         </form>
 
         <div id="answer-output" class="answer-output empty-state">
-          Ask a question to synthesize a cited answer.
+          Ask a recruiter question to get a grounded explanation from the retrieved candidate context.
         </div>
-      </section>
-
-      <section class="panel results-panel">
-        <div class="section-head">
-          <div>
-            <p class="section-kicker">Search results</p>
-            <h2>Semantic matches</h2>
-          </div>
-          <span class="section-badge" id="results-count">0 results</span>
-        </div>
-        <div id="results-list" class="results-list empty-state">
-          Run a search to surface the most relevant chunks from Endee.
-        </div>
-      </section>
-
-      <section class="panel related-panel">
-        <div class="section-head">
-          <div>
-            <p class="section-kicker">Recommendations</p>
-            <h2>Related knowledge</h2>
-          </div>
-          <span class="section-badge">Vector similarity</span>
-        </div>
-        <div id="related-list" class="results-list empty-state">
-          Select a result to find similar passages.
-        </div>
-      </section>
-
-      <section class="panel upload-panel">
-        <div class="section-head">
-          <div>
-            <p class="section-kicker">Ingestion</p>
-            <h2>Upload knowledge</h2>
-          </div>
-          <span class="section-badge">TXT or MD</span>
-        </div>
-
-        <form id="upload-form" class="form-stack">
-          <label class="field">
-            <span>Files</span>
-            <input id="upload-files" name="files" type="file" accept=".txt,.md,.markdown" multiple>
-          </label>
-
-          <label class="field">
-            <span>Title override</span>
-            <input id="upload-title" name="title" type="text" placeholder="Optional document title">
-          </label>
-
-          <div class="filter-grid">
-            <label class="field">
-              <span>Department</span>
-              <select id="upload-department" name="department"></select>
-            </label>
-            <label class="field">
-              <span>Document type</span>
-              <select id="upload-doc-type" name="doc_type"></select>
-            </label>
-            <label class="field">
-              <span>Audience</span>
-              <select id="upload-audience" name="audience"></select>
-            </label>
-            <label class="field">
-              <span>Source prefix</span>
-              <input id="upload-source-prefix" name="source_prefix" type="text" value="uploads">
-            </label>
-          </div>
-
-          <div class="form-actions">
-            <button class="button button-primary" type="submit">Upload and index</button>
-          </div>
-        </form>
       </section>
 
       <section class="panel prompts-panel">
         <div class="section-head">
           <div>
             <p class="section-kicker">Starter prompts</p>
-            <h2>Example questions</h2>
+            <h2>One-click examples</h2>
           </div>
-          <span class="section-badge">Ready to try</span>
+          <span class="section-badge">Ready to test</span>
         </div>
         <div id="example-prompts" class="prompt-list"></div>
       </section>
@@ -238,4 +362,3 @@
   </script>
 </body>
 </html>
-

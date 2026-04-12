@@ -4,22 +4,22 @@ from app.filters import build_endee_filter
 
 
 class FilterTests(unittest.TestCase):
-    def test_build_endee_filter_omits_all(self):
-        self.assertIsNone(build_endee_filter())
-        self.assertIsNone(build_endee_filter(department="all", doc_type="all", audience="all"))
+    def test_build_endee_filter_defaults_to_candidate(self):
+        clauses = build_endee_filter()
+        self.assertEqual(clauses, [{"entity_type": {"$eq": "candidate"}}])
 
     def test_build_endee_filter_builds_clauses(self):
-        clauses = build_endee_filter(department="engineering", doc_type="runbook", audience="internal")
+        clauses = build_endee_filter(entity_type="candidate", role="engineering", location="Remote", stage="screening")
         self.assertEqual(
             clauses,
             [
-                {"department": {"$eq": "engineering"}},
-                {"doc_type": {"$eq": "runbook"}},
-                {"audience": {"$eq": "internal"}},
+                {"entity_type": {"$eq": "candidate"}},
+                {"target_role": {"$eq": "engineering"}},
+                {"location": {"$eq": "Remote"}},
+                {"stage": {"$eq": "screening"}},
             ],
         )
 
 
 if __name__ == "__main__":
     unittest.main()
-
