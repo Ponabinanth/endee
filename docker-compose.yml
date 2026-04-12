@@ -1,0 +1,28 @@
+services:
+  endee:
+    image: endeeio/endee-server:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - endee-data:/data
+    restart: unless-stopped
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: InsightForge
+      ENDEE_BASE_URL: http://endee:8080/api/v1
+      ENDEE_INDEX_NAME: insightforge_knowledge
+      EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      SEED_SAMPLE_DATA: "true"
+    depends_on:
+      - endee
+    restart: unless-stopped
+
+volumes:
+  endee-data:
+

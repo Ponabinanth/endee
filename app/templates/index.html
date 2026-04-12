@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <div class="noise"></div>
+
+  <div class="app-shell">
+    <header class="hero panel">
+      <div class="hero-copy">
+        <div class="eyebrow">Endee-powered knowledge retrieval</div>
+        <h1>{{ app_name }}</h1>
+        <p class="hero-subtitle">
+          Semantic search, cited RAG answers, and related-document recommendations for an internal knowledge base.
+        </p>
+        <div class="hero-actions">
+          <button class="button button-primary" type="button" id="sample-question-button">
+            Try a sample question
+          </button>
+          <button class="button button-secondary" type="button" id="refresh-button">
+            Refresh status
+          </button>
+        </div>
+        <div id="status-pill" class="status-pill status-pending">Checking Endee...</div>
+      </div>
+
+      <div class="hero-metrics">
+        <div class="metric-card">
+          <span class="metric-label">Index</span>
+          <strong id="metric-index">{{ status.index_name }}</strong>
+          <span class="metric-caption">Cosine + INT8 on Endee</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Embedding</span>
+          <strong id="metric-backend">{{ status.embedding_backend }}</strong>
+          <span class="metric-caption" id="metric-model">{{ status.embedding_model }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Corpus</span>
+          <strong id="metric-corpus">{{ status.sample_documents }}</strong>
+          <span class="metric-caption"><span id="metric-chunks">{{ status.sample_chunks }}</span> indexed chunks</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="panel control-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Search and retrieval</p>
+            <h2>Semantic search</h2>
+          </div>
+          <span class="section-badge">Endee filters</span>
+        </div>
+
+        <form id="search-form" class="form-stack">
+          <label class="field">
+            <span>Query</span>
+            <input id="search-query" name="query" type="text" placeholder="Ask about rollbacks, support, policy, or pricing...">
+          </label>
+
+          <div class="filter-grid">
+            <label class="field">
+              <span>Department</span>
+              <select id="search-department" name="department"></select>
+            </label>
+            <label class="field">
+              <span>Document type</span>
+              <select id="search-doc-type" name="doc_type"></select>
+            </label>
+            <label class="field">
+              <span>Audience</span>
+              <select id="search-audience" name="audience"></select>
+            </label>
+            <label class="field">
+              <span>Top K</span>
+              <input id="search-top-k" name="top_k" type="range" min="3" max="10" value="5">
+              <div class="range-labels">
+                <span>3</span>
+                <span id="search-top-k-value">5</span>
+                <span>10</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit">Search</button>
+            <button class="button button-ghost" type="button" id="clear-search">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel answer-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Grounded synthesis</p>
+            <h2>RAG answer</h2>
+          </div>
+          <span class="section-badge">Cited output</span>
+        </div>
+
+        <form id="answer-form" class="form-stack">
+          <label class="field">
+            <span>Question</span>
+            <textarea id="answer-question" name="question" rows="4" placeholder="What is the rollback process for a production release?"></textarea>
+          </label>
+
+          <div class="filter-grid">
+            <label class="field">
+              <span>Department</span>
+              <select id="answer-department" name="department"></select>
+            </label>
+            <label class="field">
+              <span>Document type</span>
+              <select id="answer-doc-type" name="doc_type"></select>
+            </label>
+            <label class="field">
+              <span>Audience</span>
+              <select id="answer-audience" name="audience"></select>
+            </label>
+            <label class="field">
+              <span>Top K</span>
+              <input id="answer-top-k" name="top_k" type="range" min="3" max="10" value="4">
+              <div class="range-labels">
+                <span>3</span>
+                <span id="answer-top-k-value">4</span>
+                <span>10</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit">Generate answer</button>
+            <button class="button button-ghost" type="button" id="use-search-query">Use search query</button>
+          </div>
+        </form>
+
+        <div id="answer-output" class="answer-output empty-state">
+          Ask a question to synthesize a cited answer.
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Search results</p>
+            <h2>Semantic matches</h2>
+          </div>
+          <span class="section-badge" id="results-count">0 results</span>
+        </div>
+        <div id="results-list" class="results-list empty-state">
+          Run a search to surface the most relevant chunks from Endee.
+        </div>
+      </section>
+
+      <section class="panel related-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Recommendations</p>
+            <h2>Related knowledge</h2>
+          </div>
+          <span class="section-badge">Vector similarity</span>
+        </div>
+        <div id="related-list" class="results-list empty-state">
+          Select a result to find similar passages.
+        </div>
+      </section>
+
+      <section class="panel upload-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Ingestion</p>
+            <h2>Upload knowledge</h2>
+          </div>
+          <span class="section-badge">TXT or MD</span>
+        </div>
+
+        <form id="upload-form" class="form-stack">
+          <label class="field">
+            <span>Files</span>
+            <input id="upload-files" name="files" type="file" accept=".txt,.md,.markdown" multiple>
+          </label>
+
+          <label class="field">
+            <span>Title override</span>
+            <input id="upload-title" name="title" type="text" placeholder="Optional document title">
+          </label>
+
+          <div class="filter-grid">
+            <label class="field">
+              <span>Department</span>
+              <select id="upload-department" name="department"></select>
+            </label>
+            <label class="field">
+              <span>Document type</span>
+              <select id="upload-doc-type" name="doc_type"></select>
+            </label>
+            <label class="field">
+              <span>Audience</span>
+              <select id="upload-audience" name="audience"></select>
+            </label>
+            <label class="field">
+              <span>Source prefix</span>
+              <input id="upload-source-prefix" name="source_prefix" type="text" value="uploads">
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="button button-primary" type="submit">Upload and index</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel prompts-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Starter prompts</p>
+            <h2>Example questions</h2>
+          </div>
+          <span class="section-badge">Ready to try</span>
+        </div>
+        <div id="example-prompts" class="prompt-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <script>
+    window.__BOOTSTRAP__ = {{ status | tojson }};
+  </script>
+</body>
+</html>
+
