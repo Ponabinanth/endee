@@ -84,6 +84,14 @@ If Endee comes online later, use the `Reconnect Endee` button in the header to s
 - Inspect telemetry-based fraud risk
 - Ask grounded hiring questions and get cited answers
 
+## How To Use
+
+1. Check the connection card in the header. If Endee is available, the status will show `connected`; otherwise you can use the `Reconnect Endee` button.
+2. Upload `.txt` or `.md` documents to build the searchable corpus.
+3. Run semantic search to find the best matches by meaning, not keywords.
+4. Rank candidates or documents against a role/specification.
+5. Open the explainability panel to get grounded answers from the retrieved context.
+
 ## Project Structure
 
 ```text
