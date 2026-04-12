@@ -352,6 +352,7 @@ body::before {
 .rank-panel { grid-column: 1 / -1; padding: 30px; animation: fadeUp 0.6s ease both 0.3s; }
 .results-panel { grid-column: span 6; padding: 30px; animation: fadeUp 0.6s ease both 0.4s; }
 .related-panel { grid-column: span 6; padding: 30px; animation: fadeUp 0.6s ease both 0.5s; }
+.compare-panel { grid-column: 1 / -1; padding: 30px; animation: fadeUp 0.6s ease both 0.55s; }
 .interview-panel { grid-column: 1 / -1; padding: 30px; animation: fadeUp 0.6s ease both 0.6s; }
 .explain-panel { grid-column: 1 / -1; padding: 30px; animation: fadeUp 0.6s ease both 0.7s; }
 .prompts-panel { grid-column: 1 / -1; padding: 30px; }
@@ -690,6 +691,125 @@ body::before {
   margin-top: 20px;
 }
 
+.comparison-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.comparison-recommendation {
+  color: #fff;
+  font-weight: 600;
+}
+
+.comparison-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 24px;
+}
+
+.comparison-card {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.28));
+}
+
+.comparison-card-winner {
+  border-color: rgba(0, 243, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 243, 255, 0.08), 0 18px 40px rgba(0, 243, 255, 0.08);
+}
+
+.comparison-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.comparison-slot {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.comparison-card h3 {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.3rem;
+  color: #fff;
+}
+
+.comparison-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.comparison-score-badge {
+  display: grid;
+  place-items: center;
+  min-width: 82px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--accent), #ffffff);
+  color: #000;
+  text-align: center;
+}
+
+.comparison-score-badge span {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.55rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.comparison-score-badge small {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.comparison-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.comparison-score-grid {
+  margin-top: 0;
+}
+
+.comparison-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.comparison-label {
+  margin: 0 0 10px;
+  color: var(--accent-2);
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.comparison-skills {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
 .advanced-score-grid {
   display: grid;
   gap: 15px;
@@ -872,7 +992,7 @@ body::before {
 
 @media (max-width: 1200px) {
   .hero, .intake-panel, .search-panel, .rank-panel, .results-panel,
-  .related-panel, .interview-panel, .explain-panel { grid-column: 1 / -1; }
+  .related-panel, .compare-panel, .interview-panel, .explain-panel { grid-column: 1 / -1; }
   .hero { grid-template-columns: 1fr; }
 }
 
@@ -886,6 +1006,7 @@ body::before {
 @media (max-width: 768px) {
   .app-shell { width: 100%; padding: 20px 15px; }
   .detail-grid, .telemetry-grid { grid-template-columns: 1fr; }
+  .comparison-grid, .comparison-columns { grid-template-columns: 1fr; }
   .hero h1 { font-size: 2.5rem; }
   .section-head { flex-direction: column; gap: 10px; }
 }

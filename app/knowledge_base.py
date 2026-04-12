@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import logging
 import time
 from dataclasses import asdict
@@ -19,12 +20,31 @@ from app.scoring import (
     evaluate_interview_answers,
     generate_interview_questions,
     missing_skills,
+    skill_overlap,
     resume_feedback as score_resume_feedback,
     fraud_assessment,
 )
 from app.vector_store import InMemoryVectorStore, select_vector_store
 
 logger = logging.getLogger(__name__)
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    if not left or not right:
+        return 0.0
+    limit = min(len(left), len(right))
+    dot = 0.0
+    norm_left = 0.0
+    norm_right = 0.0
+    for index in range(limit):
+        lv = float(left[index])
+        rv = float(right[index])
+        dot += lv * rv
+        norm_left += lv * lv
+        norm_right += rv * rv
+    if norm_left <= 0.0 or norm_right <= 0.0:
+        return 0.0
+    return dot / math.sqrt(norm_left * norm_right)
 
 
 class KnowledgeBase:
@@ -593,4 +613,229 @@ class KnowledgeBase:
             "suggestions": feedback["suggestions"],
             "missing_skills": feedback["missing_skills"],
             "raw": feedback["raw"],
+        }
+
+    def document_summary(self, *, candidate: dict[str, Any]) -> dict[str, Any]:
+        candidate_model = self._candidate_to_profile(candidate)
+        skills = dedupe_preserve_order(candidate_model.skills)
+        highlights = dedupe_preserve_order(
+            [
+                candidate_model.headline,
+                candidate_model.location,
+                *skills[:4],
+                *candidate_model.projects[:2],
+                candidate_model.summary,
+                candidate_model.source,
+            ]
+        )
+
+        focus = candidate_model.target_role or candidate_model.headline or "the available document"
+        summary_parts = [
+            f"{candidate_model.name} is a {candidate_model.years_experience:g}-year profile based in {candidate_model.location}.",
+            f"It is most aligned with {focus}.",
+        ]
+
+        if skills:
+            summary_parts.append(f"Core skills include {', '.join(skills[:5])}.")
+        if candidate_model.summary:
+            summary_parts.append(candidate_model.summary)
+        if candidate_model.projects:
+            summary_parts.append(f"Highlighted projects: {', '.join(candidate_model.projects[:3])}.")
+        if candidate_model.resume_text:
+            summary_parts.append(f"Excerpt: {truncate(candidate_model.resume_text, 220)}")
+
+        return {
+            "candidate": asdict(candidate_model),
+            "summary": " ".join(summary_parts),
+            "highlights": highlights,
+            "raw": {
+                "skill_count": len(skills),
+                "project_count": len(candidate_model.projects),
+                "resume_length": len(candidate_model.resume_text),
+            },
+        }
+
+    def compare_candidates(self, *, candidate_a: dict[str, Any], candidate_b: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
+        candidate_model_a = self._candidate_to_profile(candidate_a)
+        candidate_model_b = self._candidate_to_profile(candidate_b)
+        job_model = self._job_to_role(job)
+
+        job_text = " ".join(
+            [
+                job_model.title,
+                job_model.department,
+                job_model.description,
+                " ".join(job_model.must_have_skills),
+                " ".join(job_model.nice_to_have_skills),
+                " ".join(job_model.interview_focus),
+            ]
+        ).strip()
+        candidate_text_a = " ".join(
+            [
+                candidate_model_a.name,
+                candidate_model_a.headline,
+                candidate_model_a.target_role,
+                " ".join(candidate_model_a.skills),
+                candidate_model_a.summary,
+                " ".join(candidate_model_a.projects),
+                candidate_model_a.resume_text,
+            ]
+        ).strip()
+        candidate_text_b = " ".join(
+            [
+                candidate_model_b.name,
+                candidate_model_b.headline,
+                candidate_model_b.target_role,
+                " ".join(candidate_model_b.skills),
+                candidate_model_b.summary,
+                " ".join(candidate_model_b.projects),
+                candidate_model_b.resume_text,
+            ]
+        ).strip()
+
+        semantic_a = _cosine_similarity(self.embedder.embed(candidate_text_a), self.embedder.embed(job_text))
+        semantic_b = _cosine_similarity(self.embedder.embed(candidate_text_b), self.embedder.embed(job_text))
+
+        breakdown_a = build_rank_breakdown(candidate_model_a, job_model, semantic_score=semantic_a)
+        breakdown_b = build_rank_breakdown(candidate_model_b, job_model, semantic_score=semantic_b)
+
+        shared_skills = dedupe_preserve_order(skill_overlap(candidate_model_a.skills, candidate_model_b.skills))
+        unique_skills_a = dedupe_preserve_order(missing_skills(candidate_model_b.skills, candidate_model_a.skills))
+        unique_skills_b = dedupe_preserve_order(missing_skills(candidate_model_a.skills, candidate_model_b.skills))
+
+        score_a = breakdown_a["overall_score"]
+        score_b = breakdown_b["overall_score"]
+        score_delta = round(score_a - score_b, 2)
+        abs_delta = abs(score_delta)
+
+        if abs_delta < 5:
+            winner = "tie"
+            recommendation = (
+                f"Both candidates are close for {job_model.title}. "
+                f"Use the final interview to separate them on {job_model.interview_focus[0] if job_model.interview_focus else 'role-specific execution'}."
+            )
+            summary = (
+                f"{candidate_model_a.name} and {candidate_model_b.name} are effectively tied for {job_model.title}. "
+                f"The decision comes down to the quality of their interview signals and how strongly they address the job's top gaps."
+            )
+        else:
+            if score_a > score_b:
+                winner = candidate_model_a.id
+                recommendation = (
+                    f"Shortlist {candidate_model_a.name} for {job_model.title}; the overall fit is stronger by {abs_delta:.1f} points."
+                )
+                summary = (
+                    f"{candidate_model_a.name} is the stronger match for {job_model.title}. "
+                    f"They lead on semantic fit, skills coverage, or experience relative to the role."
+                )
+            else:
+                winner = candidate_model_b.id
+                recommendation = (
+                    f"Shortlist {candidate_model_b.name} for {job_model.title}; the overall fit is stronger by {abs_delta:.1f} points."
+                )
+                summary = (
+                    f"{candidate_model_b.name} is the stronger match for {job_model.title}. "
+                    f"They lead on semantic fit, skills coverage, or experience relative to the role."
+                )
+
+        strengths_a = dedupe_preserve_order(
+            [
+                f"Overall score of {score_a:.1f}/100.",
+                f"Semantic alignment score of {breakdown_a['semantic_score']:.1f}/100.",
+                f"Matches: {', '.join(skill_overlap(candidate_model_a.skills, job_model.must_have_skills)[:4])}"
+                if skill_overlap(candidate_model_a.skills, job_model.must_have_skills)
+                else "",
+            ]
+        )
+        strengths_b = dedupe_preserve_order(
+            [
+                f"Overall score of {score_b:.1f}/100.",
+                f"Semantic alignment score of {breakdown_b['semantic_score']:.1f}/100.",
+                f"Matches: {', '.join(skill_overlap(candidate_model_b.skills, job_model.must_have_skills)[:4])}"
+                if skill_overlap(candidate_model_b.skills, job_model.must_have_skills)
+                else "",
+            ]
+        )
+
+        concerns_a = dedupe_preserve_order(
+            [
+                f"Missing skills: {', '.join(breakdown_a['gaps'][:4])}" if breakdown_a["gaps"] else "",
+                f"Experience is below the target of {job_model.min_years_experience:g} years."
+                if breakdown_a["experience_score"] < 88
+                else "",
+                "Semantic fit is only moderate." if breakdown_a["semantic_score"] < 65 else "",
+            ]
+        )
+        concerns_b = dedupe_preserve_order(
+            [
+                f"Missing skills: {', '.join(breakdown_b['gaps'][:4])}" if breakdown_b["gaps"] else "",
+                f"Experience is below the target of {job_model.min_years_experience:g} years."
+                if breakdown_b["experience_score"] < 88
+                else "",
+                "Semantic fit is only moderate." if breakdown_b["semantic_score"] < 65 else "",
+            ]
+        )
+
+        candidate_snapshot_a = {
+            "candidate_id": candidate_model_a.id,
+            "name": candidate_model_a.name,
+            "headline": candidate_model_a.headline,
+            "target_role": candidate_model_a.target_role,
+            "years_experience": candidate_model_a.years_experience,
+            "location": candidate_model_a.location,
+            "skills": list(candidate_model_a.skills),
+            "resume_text": candidate_model_a.resume_text,
+            "source": candidate_model_a.source,
+            "stage": candidate_model_a.stage,
+        }
+        candidate_snapshot_b = {
+            "candidate_id": candidate_model_b.id,
+            "name": candidate_model_b.name,
+            "headline": candidate_model_b.headline,
+            "target_role": candidate_model_b.target_role,
+            "years_experience": candidate_model_b.years_experience,
+            "location": candidate_model_b.location,
+            "skills": list(candidate_model_b.skills),
+            "resume_text": candidate_model_b.resume_text,
+            "source": candidate_model_b.source,
+            "stage": candidate_model_b.stage,
+        }
+        job_snapshot = {
+            "job_id": job_model.id,
+            "title": job_model.title,
+            "description": job_model.description,
+            "department": job_model.department,
+            "location": job_model.location,
+            "min_years_experience": job_model.min_years_experience,
+            "must_have_skills": list(job_model.must_have_skills),
+            "nice_to_have_skills": list(job_model.nice_to_have_skills),
+            "interview_focus": list(job_model.interview_focus),
+        }
+
+        return {
+            "candidate_a": candidate_snapshot_a,
+            "candidate_b": candidate_snapshot_b,
+            "job": job_snapshot,
+            "summary": summary,
+            "recommendation": recommendation,
+            "winner": winner,
+            "score_a": score_a,
+            "score_b": score_b,
+            "score_delta": score_delta,
+            "semantic_a": breakdown_a["semantic_score"],
+            "semantic_b": breakdown_b["semantic_score"],
+            "shared_skills": shared_skills,
+            "unique_skills_a": unique_skills_a,
+            "unique_skills_b": unique_skills_b,
+            "strengths_a": strengths_a,
+            "strengths_b": strengths_b,
+            "concerns_a": concerns_a,
+            "concerns_b": concerns_b,
+            "score_breakdown_a": breakdown_a,
+            "score_breakdown_b": breakdown_b,
+            "raw": {
+                "job_text_length": len(job_text),
+                "candidate_a_text_length": len(candidate_text_a),
+                "candidate_b_text_length": len(candidate_text_b),
+            },
         }

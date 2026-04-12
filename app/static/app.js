@@ -6,8 +6,14 @@ const state = {
   ready: Boolean(bootstrap.ready),
   candidates: [],
   jobs: [],
+  lastSearchResults: [],
+  lastRankResults: [],
+  lastComparison: null,
   selectedCandidateId: "",
   selectedJobId: "",
+  compareCandidateAId: "",
+  compareCandidateBId: "",
+  compareJobId: "",
   currentQuestions: [],
   interviewActive: false,
   telemetry: {
@@ -25,6 +31,7 @@ const state = {
 const STORAGE_KEYS = {
   candidates: "smartdoc.candidates.v1",
   jobs: "smartdoc.jobs.v1",
+  comparison: "smartdoc.comparison.v1",
 };
 
 const els = {
@@ -56,7 +63,7 @@ const els = {
   reconnectVectorButton: document.getElementById("reconnect-vector-button"),
   resetSessionButton: document.getElementById("reset-session-button"),
   clearSearchButton: document.getElementById("clear-search"),
-  useSearchQueryButton: document.getElementById("use-search-query"),
+  copySearchQueryButtons: Array.from(document.querySelectorAll("[data-copy-search-query]")),
   searchQuery: document.getElementById("search-query"),
   answerQuestion: document.getElementById("answer-question"),
   searchTopK: document.getElementById("search-top-k"),
@@ -92,6 +99,13 @@ const els = {
   exportSearchCsvButton: document.getElementById("export-search-csv"),
   exportRankCsvButton: document.getElementById("export-rank-csv"),
   documentSummary: document.getElementById("document-summary"),
+  compareCandidateA: document.getElementById("compare-candidate-a"),
+  compareCandidateB: document.getElementById("compare-candidate-b"),
+  compareJob: document.getElementById("compare-job"),
+  compareButton: document.getElementById("compare-button"),
+  compareUseTopTwoButton: document.getElementById("compare-use-top-two"),
+  compareClearButton: document.getElementById("compare-clear-button"),
+  comparisonOutput: document.getElementById("comparison-output"),
   interviewCandidate: document.getElementById("interview-candidate"),
   interviewJob: document.getElementById("interview-job"),
   searchRole: document.getElementById("search-role"),
@@ -251,6 +265,46 @@ function populateFilterSelects(filters) {
   });
 }
 
+function candidateLabel(candidate) {
+  return `${candidate.name || "Candidate"} | ${candidate.target_role || candidate.headline || "Candidate"}`;
+}
+
+function jobLabel(job) {
+  return `${job.title || "Job"} | ${job.location || "Remote"}`;
+}
+
+function populateEntitySelect(select, items, labelFn, { emptyLabel, placeholder = "Select..." } = {}) {
+  const currentValue = select.value;
+  select.innerHTML = "";
+
+  if (!items.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = emptyLabel || placeholder;
+    select.appendChild(option);
+    select.value = "";
+    return;
+  }
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = placeholder;
+  select.appendChild(placeholderOption);
+
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = item.candidate_id || item.job_id || item.id;
+    option.textContent = labelFn(item);
+    select.appendChild(option);
+  }
+
+  if (currentValue && [...select.options].some((option) => option.value === currentValue)) {
+    select.value = currentValue;
+  } else {
+    select.value = items[0].candidate_id || items[0].job_id || items[0].id;
+  }
+}
+
 function renderPromptChips(prompts) {
   els.examplePrompts.innerHTML = "";
   for (const prompt of prompts) {
@@ -364,6 +418,13 @@ function candidateSnapshotFromResult(result) {
   };
 }
 
+function rememberCandidateResult(result) {
+  const snapshot = candidateSnapshotFromResult(result);
+  state.candidates = upsertById(state.candidates, snapshot, "candidate_id");
+  saveToStorage(STORAGE_KEYS.candidates, state.candidates);
+  return snapshot;
+}
+
 function candidateSnapshotFromState(candidate) {
   if (!candidate) {
     return null;
@@ -381,6 +442,27 @@ function candidateSnapshotFromState(candidate) {
     source: candidate.source || "",
     stage: candidate.stage || "screening",
   };
+}
+
+function getCandidateRecordById(id) {
+  return state.candidates.find((candidate) => (candidate.candidate_id || candidate.id) === id) || null;
+}
+
+function getJobRecordById(id) {
+  return state.jobs.find((job) => (job.job_id || job.id) === id) || null;
+}
+
+function setComparisonCandidate(slot, result) {
+  const snapshot = rememberCandidateResult(result);
+  if (slot === "a") {
+    state.compareCandidateAId = snapshot.candidate_id || snapshot.id || "";
+  } else {
+    state.compareCandidateBId = snapshot.candidate_id || snapshot.id || "";
+  }
+  refreshEntities().catch((error) => {
+    showToast(error.message, "error");
+  });
+  showToast(`${result.name} added to comparison ${slot.toUpperCase()}.`);
 }
 
 function jobSnapshotFromState(job) {
@@ -415,6 +497,79 @@ function jobSnapshotFromForm() {
     nice_to_have_skills: splitList(els.jobNiceHave.value),
     interview_focus: splitList(els.jobFocus.value),
   };
+}
+
+function saveComparisonState() {
+  window.localStorage.setItem(
+    STORAGE_KEYS.comparison,
+    JSON.stringify({
+      candidate_a: state.compareCandidateAId || "",
+      candidate_b: state.compareCandidateBId || "",
+      job: state.compareJobId || "",
+    })
+  );
+}
+
+function restoreComparisonState() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEYS.comparison);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    state.compareCandidateAId = parsed?.candidate_a || "";
+    state.compareCandidateBId = parsed?.candidate_b || "";
+    state.compareJobId = parsed?.job || "";
+  } catch {
+    state.compareCandidateAId = "";
+    state.compareCandidateBId = "";
+    state.compareJobId = "";
+  }
+}
+
+function populateComparisonControls() {
+  els.compareCandidateA.value = state.compareCandidateAId || state.selectedCandidateId || "";
+  els.compareCandidateB.value = state.compareCandidateBId || "";
+  els.compareJob.value = state.compareJobId || state.selectedJobId || "";
+
+  populateEntitySelect(els.compareCandidateA, state.candidates, candidateLabel, {
+    placeholder: "Select candidate A",
+    emptyLabel: "No candidates yet",
+  });
+  populateEntitySelect(els.compareCandidateB, state.candidates, candidateLabel, {
+    placeholder: "Select candidate B",
+    emptyLabel: "No candidates yet",
+  });
+  populateEntitySelect(els.compareJob, state.jobs, jobLabel, {
+    placeholder: "Select job context",
+    emptyLabel: "No jobs yet",
+  });
+
+  if (state.candidates.length > 1 && els.compareCandidateB.value === els.compareCandidateA.value) {
+    const fallback = state.candidates[1].candidate_id || state.candidates[1].id;
+    if (fallback) {
+      els.compareCandidateB.value = fallback;
+    }
+  }
+
+  if (!els.compareCandidateA.value && state.candidates.length) {
+    els.compareCandidateA.value = state.candidates[0].candidate_id || state.candidates[0].id;
+  }
+  if (!els.compareCandidateB.value && state.candidates.length > 1) {
+    els.compareCandidateB.value = state.candidates[1].candidate_id || state.candidates[1].id;
+  } else if (!els.compareCandidateB.value && state.candidates.length) {
+    els.compareCandidateB.value = state.candidates[0].candidate_id || state.candidates[0].id;
+  }
+  if (!els.compareJob.value && state.jobs.length) {
+    els.compareJob.value = state.jobs[0].job_id || state.jobs[0].id;
+  }
+
+  state.compareCandidateAId = els.compareCandidateA.value || "";
+  state.compareCandidateBId = els.compareCandidateB.value || "";
+  state.compareJobId = els.compareJob.value || "";
+  if (state.compareCandidateAId || state.compareCandidateBId || state.compareJobId) {
+    saveComparisonState();
+  }
 }
 
 function renderCandidateCards(results, target, { kind = "search" } = {}) {
@@ -461,14 +616,14 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
       <div class="card-actions">
         <button type="button" class="button button-secondary" data-action="select">Use in interview</button>
         <button type="button" class="button button-secondary" data-action="related">Find related</button>
+        <button type="button" class="button button-secondary" data-action="compare-a">Set as A</button>
+        <button type="button" class="button button-secondary" data-action="compare-b">Set as B</button>
         <button type="button" class="button button-ghost" data-action="feedback">Resume feedback</button>
       </div>
     `;
 
     card.querySelector('[data-action="select"]').addEventListener("click", () => {
-      const snapshot = candidateSnapshotFromResult(result);
-      state.candidates = upsertById(state.candidates, snapshot, "candidate_id");
-      saveToStorage(STORAGE_KEYS.candidates, state.candidates);
+      rememberCandidateResult(result);
       // Keep the interview dropdowns in sync with what we just selected.
       refreshEntities();
       selectCandidate(result.id);
@@ -489,6 +644,14 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
       } catch (error) {
         showToast(error.message, "error");
       }
+    });
+
+    card.querySelector('[data-action="compare-a"]').addEventListener("click", () => {
+      setComparisonCandidate("a", result);
+    });
+
+    card.querySelector('[data-action="compare-b"]').addEventListener("click", () => {
+      setComparisonCandidate("b", result);
     });
 
     target.appendChild(card);
@@ -664,6 +827,113 @@ function renderTelemetryPanel() {
   `;
 }
 
+function renderComparisonCard(candidate, breakdown, slotLabel, isWinner) {
+  const strengths = slotLabel === "Candidate A" ? state.lastComparison?.strengths_a || [] : state.lastComparison?.strengths_b || [];
+  const concerns = slotLabel === "Candidate A" ? state.lastComparison?.concerns_a || [] : state.lastComparison?.concerns_b || [];
+  const score = clampNumber(breakdown?.overall_score ?? 0, 0).toFixed(1);
+  const semantic = clampNumber(breakdown?.semantic_score ?? 0, 0).toFixed(1);
+  const skill = clampNumber(breakdown?.skill_score ?? 0, 0).toFixed(1);
+  const experience = clampNumber(breakdown?.experience_score ?? 0, 0).toFixed(1);
+  const location = clampNumber(breakdown?.location_score ?? 0, 0).toFixed(1);
+  return `
+    <article class="comparison-card ${isWinner ? "comparison-card-winner" : ""}">
+      <div class="comparison-card-head">
+        <div>
+          <p class="comparison-slot">${escapeHtml(slotLabel)}</p>
+          <h3>${escapeHtml(candidate?.name || "Candidate")}</h3>
+          <p class="comparison-subtitle">${escapeHtml(candidate?.headline || candidate?.target_role || "")}</p>
+        </div>
+        <div class="comparison-score-badge">
+          <span>${score}</span>
+          <small>Overall</small>
+        </div>
+      </div>
+
+      <div class="comparison-chips">
+        ${(candidate?.skills || []).slice(0, 5).map((skillName) => `<span class="chip chip-outline">${escapeHtml(skillName)}</span>`).join("")}
+      </div>
+
+      <div class="advanced-score-grid comparison-score-grid">
+        ${renderScoreBar("Semantic", semantic)}
+        ${renderScoreBar("Skill Fit", skill)}
+        ${renderScoreBar("Experience", experience)}
+        ${renderScoreBar("Location", location)}
+      </div>
+
+      <div class="comparison-columns">
+        <div>
+          <p class="comparison-label">Strengths</p>
+          <ul class="bullet-list">
+            ${(strengths || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No strengths recorded.</li>"}
+          </ul>
+        </div>
+        <div>
+          <p class="comparison-label">Concerns</p>
+          <ul class="bullet-list">
+            ${(concerns || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No major concerns.</li>"}
+          </ul>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderComparison(payload) {
+  state.lastComparison = payload;
+  els.comparisonOutput.classList.remove("empty-state");
+
+  const winnerName = payload.winner === "tie"
+    ? "Close call"
+    : payload.winner === (payload.candidate_a?.candidate_id || payload.candidate_a?.id)
+      ? payload.candidate_a?.name
+      : payload.candidate_b?.name;
+
+  const winnerChipClass = payload.winner === "tie" ? "chip-outline" : "";
+  const sharedSkills = (payload.shared_skills || []).slice(0, 6);
+  const uniqueSkillsA = (payload.unique_skills_a || []).slice(0, 6);
+  const uniqueSkillsB = (payload.unique_skills_b || []).slice(0, 6);
+  const scoreDelta = Number(payload.score_delta || 0);
+
+  els.comparisonOutput.innerHTML = `
+    <div class="comparison-summary">
+      <div class="report-header">Decision Brief</div>
+      <div class="chip-row">
+        <span class="chip ${winnerChipClass}">${escapeHtml(winnerName || "Balanced pair")}</span>
+        <span class="chip">Delta ${escapeHtml(scoreDelta >= 0 ? `+${scoreDelta.toFixed(1)}` : scoreDelta.toFixed(1))}</span>
+        <span class="chip">Job ${escapeHtml(payload.job?.title || "Selected role")}</span>
+      </div>
+      <p class="insight-summary">${escapeHtml(payload.summary || "")}</p>
+      <p class="insight-summary comparison-recommendation">${escapeHtml(payload.recommendation || "")}</p>
+    </div>
+
+    <div class="comparison-grid">
+      ${renderComparisonCard(payload.candidate_a, payload.score_breakdown_a, "Candidate A", payload.winner === (payload.candidate_a?.candidate_id || payload.candidate_a?.id))}
+      ${renderComparisonCard(payload.candidate_b, payload.score_breakdown_b, "Candidate B", payload.winner === (payload.candidate_b?.candidate_id || payload.candidate_b?.id))}
+    </div>
+
+    <div class="comparison-skills">
+      <div>
+        <p class="comparison-label">Shared skills</p>
+        <div class="chip-row">
+          ${(sharedSkills.length ? sharedSkills : ["None detected"]).map((skill) => `<span class="chip">${escapeHtml(skill)}</span>`).join("")}
+        </div>
+      </div>
+      <div>
+        <p class="comparison-label">A unique</p>
+        <div class="chip-row">
+          ${(uniqueSkillsA.length ? uniqueSkillsA : ["None detected"]).map((skill) => `<span class="chip chip-outline">${escapeHtml(skill)}</span>`).join("")}
+        </div>
+      </div>
+      <div>
+        <p class="comparison-label">B unique</p>
+        <div class="chip-row">
+          ${(uniqueSkillsB.length ? uniqueSkillsB : ["None detected"]).map((skill) => `<span class="chip chip-outline">${escapeHtml(skill)}</span>`).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
@@ -705,6 +975,8 @@ function wireRangeCounter(rangeId, outputId) {
 }
 
 function resetSearchResults() {
+  state.lastSearchResults = [];
+  state.lastRankResults = [];
   els.searchResults.innerHTML = "";
   renderEmpty(els.searchResults, "Run a search to surface the most relevant candidates.");
   els.relatedResults.innerHTML = "";
@@ -810,6 +1082,7 @@ async function refreshEntities() {
 
   state.selectedCandidateId = els.interviewCandidate.value || "";
   state.selectedJobId = els.interviewJob.value || "";
+  populateComparisonControls();
 }
 
 async function requestSearch() {
@@ -826,6 +1099,7 @@ async function requestSearch() {
   };
 
   const payload = await postJson("/api/search", body);
+  state.lastSearchResults = payload.results || [];
   state.candidates = (payload.results || []).reduce((acc, result) => {
     return upsertById(acc, candidateSnapshotFromResult(result), "candidate_id");
   }, state.candidates);
@@ -969,6 +1243,7 @@ async function rankCandidates() {
     saveToStorage(STORAGE_KEYS.jobs, state.jobs);
   }
 
+  state.lastRankResults = response.ranked_candidates || [];
   state.candidates = (response.ranked_candidates || []).reduce((acc, item) => {
     return upsertById(acc, candidateSnapshotFromResult(item), "candidate_id");
   }, state.candidates);
@@ -1074,13 +1349,83 @@ async function requestDocumentSummary() {
   const payload = await postJson("/api/document-summary", {
     candidate
   });
-  
+
+  const highlights = Array.isArray(payload.highlights) && payload.highlights.length
+    ? `
+      <ul class="bullet-list">
+        ${payload.highlights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    `
+    : "";
+
   els.documentSummary.classList.remove("empty-state");
   els.documentSummary.innerHTML = `
     <div class="report-header">Executive Summary</div>
     <p class="insight-summary" style="color: #fff; font-size: 1.05rem;">${escapeHtml(payload.summary || "")}</p>
+    ${highlights}
   `;
-  showToast("Generated executive summary.");
+  showToast(`Generated executive summary for ${payload.candidate?.name || "the selected document"}.`);
+}
+
+function comparisonCandidatesFromSource(source) {
+  return (source || [])
+    .map((item) => {
+      const snapshot = candidateSnapshotFromResult(item);
+      return snapshot.candidate_id ? snapshot : null;
+    })
+    .filter(Boolean);
+}
+
+function resetComparisonPanel(message = "Pick two candidates and a role to generate a head-to-head decision brief.") {
+  state.lastComparison = null;
+  els.comparisonOutput.classList.add("empty-state");
+  els.comparisonOutput.innerHTML = `<p class="empty-copy">${escapeHtml(message)}</p>`;
+}
+
+async function requestComparison() {
+  state.compareCandidateAId = els.compareCandidateA.value || state.compareCandidateAId;
+  state.compareCandidateBId = els.compareCandidateB.value || state.compareCandidateBId;
+  state.compareJobId = els.compareJob.value || state.compareJobId;
+  saveComparisonState();
+
+  const candidateA = candidateSnapshotFromState(getCandidateRecordById(els.compareCandidateA.value || state.compareCandidateAId));
+  const candidateB = candidateSnapshotFromState(getCandidateRecordById(els.compareCandidateB.value || state.compareCandidateBId));
+  const job = jobSnapshotFromState(getJobRecordById(els.compareJob.value || state.compareJobId)) || jobSnapshotFromForm();
+
+  if (!candidateA || !candidateB || !job) {
+    showToast("Choose two candidates and a job first.", "error");
+    return;
+  }
+
+  if ((candidateA.candidate_id || candidateA.id) === (candidateB.candidate_id || candidateB.id)) {
+    showToast("Pick two different candidates for comparison.", "error");
+    return;
+  }
+
+  const payload = await postJson("/api/compare", {
+    candidate_a: candidateA,
+    candidate_b: candidateB,
+    job,
+  });
+  renderComparison(payload);
+  showToast(`Compared ${payload.candidate_a?.name || "Candidate A"} and ${payload.candidate_b?.name || "Candidate B"}.`);
+}
+
+function useTopTwoComparison() {
+  const source = state.lastRankResults.length >= 2 ? state.lastRankResults : state.lastSearchResults.length >= 2 ? state.lastSearchResults : state.candidates;
+  const candidates = comparisonCandidatesFromSource(source);
+  if (candidates.length < 2) {
+    showToast("Run a search or rank first so there are two candidates to compare.", "error");
+    return;
+  }
+
+  state.compareCandidateAId = candidates[0].candidate_id || candidates[0].id || "";
+  state.compareCandidateBId = candidates[1].candidate_id || candidates[1].id || "";
+  if (!state.compareJobId && state.jobs.length) {
+    state.compareJobId = state.jobs[0].job_id || state.jobs[0].id || "";
+  }
+  populateComparisonControls();
+  showToast("Loaded the top two candidates into the comparison panel.");
 }
 
 async function downloadCsv(url, body) {
@@ -1176,6 +1521,7 @@ async function initialize() {
   setStatus(bootstrap);
   populateFilterSelects(state.filters);
   renderPromptChips(state.examples);
+  restoreComparisonState();
   wireRangeCounter("search-top-k", "search-top-k-value");
   wireRangeCounter("answer-top-k", "answer-top-k-value");
   wireRangeCounter("interview-count", "interview-count-value");
@@ -1203,6 +1549,7 @@ async function initialize() {
 
   resetSearchResults();
   resetInterviewSession();
+  resetComparisonPanel();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1290,7 +1637,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   els.exportSearchCsvButton?.addEventListener("click", async () => {
     try {
-      await downloadCsv("/api/export-csv", { docs: state.candidates });
+      await downloadCsv("/api/export-csv", { docs: state.lastSearchResults });
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1298,7 +1645,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   els.exportRankCsvButton?.addEventListener("click", async () => {
     try {
-      await downloadCsv("/api/export-csv", { docs: state.candidates });
+      await downloadCsv("/api/export-csv", { docs: state.lastRankResults });
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1340,10 +1687,33 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast("Search cleared.");
   });
 
-  els.useSearchQueryButton.addEventListener("click", () => {
-    els.answerQuestion.value = els.searchQuery.value || els.answerQuestion.value;
-    showToast("Copied the search query into the explainability panel.");
+  els.compareButton.addEventListener("click", async () => {
+    try {
+      await requestComparison();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   });
+
+  els.compareUseTopTwoButton.addEventListener("click", () => {
+    try {
+      useTopTwoComparison();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.compareClearButton.addEventListener("click", () => {
+    resetComparisonPanel();
+    showToast("Comparison cleared.");
+  });
+
+  for (const button of els.copySearchQueryButtons) {
+    button.addEventListener("click", () => {
+      els.answerQuestion.value = els.searchQuery.value || els.answerQuestion.value;
+      showToast("Copied the search query into the explainability panel.");
+    });
+  }
 
   els.interviewCandidate.addEventListener("change", () => {
     state.selectedCandidateId = els.interviewCandidate.value;
@@ -1351,6 +1721,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   els.interviewJob.addEventListener("change", () => {
     state.selectedJobId = els.interviewJob.value;
+  });
+
+  els.compareCandidateA.addEventListener("change", () => {
+    state.compareCandidateAId = els.compareCandidateA.value || "";
+    saveComparisonState();
+  });
+
+  els.compareCandidateB.addEventListener("change", () => {
+    state.compareCandidateBId = els.compareCandidateB.value || "";
+    saveComparisonState();
+  });
+
+  els.compareJob.addEventListener("change", () => {
+    state.compareJobId = els.compareJob.value || "";
+    saveComparisonState();
   });
 
   els.multipleFaces.addEventListener("change", () => {

@@ -244,6 +244,51 @@ class ResumeFeedbackResponse(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class DocumentSummaryRequest(BaseModel):
+    candidate: CandidateSnapshot
+
+
+class DocumentSummaryResponse(BaseModel):
+    candidate: CandidateSnapshot
+    summary: str
+    highlights: list[str] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class CandidateComparisonRequest(BaseModel):
+    candidate_a: CandidateSnapshot
+    candidate_b: CandidateSnapshot
+    job: JobSnapshot
+
+
+class CandidateComparisonResponse(BaseModel):
+    candidate_a: CandidateSnapshot
+    candidate_b: CandidateSnapshot
+    job: JobSnapshot
+    summary: str
+    recommendation: str
+    winner: str
+    score_a: float
+    score_b: float
+    score_delta: float
+    semantic_a: float
+    semantic_b: float
+    shared_skills: list[str] = Field(default_factory=list)
+    unique_skills_a: list[str] = Field(default_factory=list)
+    unique_skills_b: list[str] = Field(default_factory=list)
+    strengths_a: list[str] = Field(default_factory=list)
+    strengths_b: list[str] = Field(default_factory=list)
+    concerns_a: list[str] = Field(default_factory=list)
+    concerns_b: list[str] = Field(default_factory=list)
+    score_breakdown_a: dict[str, Any] = Field(default_factory=dict)
+    score_breakdown_b: dict[str, Any] = Field(default_factory=dict)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+class CsvExportRequest(BaseModel):
+    docs: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class FraudScoreRequest(BaseModel):
     telemetry: InterviewTelemetry = Field(default_factory=InterviewTelemetry)
 

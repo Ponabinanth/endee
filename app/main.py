@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -14,6 +17,11 @@ from app.knowledge_base import KnowledgeBase
 from app.models import (
     AnswerRequest,
     AnswerResponse,
+    CandidateComparisonRequest,
+    CandidateComparisonResponse,
+    CsvExportRequest,
+    DocumentSummaryRequest,
+    DocumentSummaryResponse,
     FraudScoreRequest,
     FraudScoreResponse,
     InterviewEvaluationRequest,
@@ -105,6 +113,65 @@ def _to_citation(result: dict[str, object], label: str) -> AnswerCitation:
         excerpt=str(result.get("excerpt", "")),
         reasons=list(result.get("reasons") or []),
     )
+
+
+CSV_EXPORT_FIELDS = [
+    "id",
+    "name",
+    "headline",
+    "target_role",
+    "location",
+    "years_experience",
+    "skills",
+    "source",
+    "score",
+    "similarity_label",
+    "semantic_score",
+    "overall_score",
+    "match_label",
+    "score_breakdown",
+    "excerpt",
+    "reasons",
+]
+
+
+def _first_present(mapping: dict[str, object], *keys: str) -> object:
+    for key in keys:
+        value = mapping.get(key)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def _csv_cell(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        return "; ".join(_csv_cell(item) for item in value if item not in (None, ""))
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _csv_row(document: dict[str, object]) -> dict[str, str]:
+    return {
+        "id": _csv_cell(_first_present(document, "id", "candidate_id", "job_id")),
+        "name": _csv_cell(_first_present(document, "name", "title")),
+        "headline": _csv_cell(_first_present(document, "headline", "summary")),
+        "target_role": _csv_cell(_first_present(document, "target_role", "department")),
+        "location": _csv_cell(_first_present(document, "location", "audience")),
+        "years_experience": _csv_cell(_first_present(document, "years_experience", "min_years_experience")),
+        "skills": _csv_cell(_first_present(document, "skills", "must_have_skills", "nice_to_have_skills")),
+        "source": _csv_cell(document.get("source")),
+        "score": _csv_cell(_first_present(document, "score", "semantic_score")),
+        "similarity_label": _csv_cell(_first_present(document, "similarity_label", "match_label")),
+        "semantic_score": _csv_cell(_first_present(document, "semantic_score", "score")),
+        "overall_score": _csv_cell(document.get("overall_score")),
+        "match_label": _csv_cell(_first_present(document, "match_label", "similarity_label")),
+        "score_breakdown": _csv_cell(document.get("score_breakdown")),
+        "excerpt": _csv_cell(document.get("excerpt")),
+        "reasons": _csv_cell(document.get("reasons")),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -226,12 +293,46 @@ async def api_resume_feedback(payload: ResumeFeedbackRequest, request: Request):
     return ResumeFeedbackResponse(**result)
 
 
+@app.post("/api/compare", response_model=CandidateComparisonResponse)
+async def api_compare(payload: CandidateComparisonRequest, request: Request):
+    ensure_ready(request)
+    kb = get_kb(request)
+    result = kb.compare_candidates(
+        candidate_a=payload.candidate_a.model_dump(),
+        candidate_b=payload.candidate_b.model_dump(),
+        job=payload.job.model_dump(),
+    )
+    return CandidateComparisonResponse(**result)
+
+
+@app.post("/api/document-summary", response_model=DocumentSummaryResponse)
+async def api_document_summary(payload: DocumentSummaryRequest, request: Request):
+    kb = get_kb(request)
+    result = kb.document_summary(candidate=payload.candidate.model_dump())
+    return DocumentSummaryResponse(**result)
+
+
 @app.post("/api/fraud-score", response_model=FraudScoreResponse)
 async def api_fraud_score(payload: FraudScoreRequest, request: Request):
     ensure_ready(request)
     kb = get_kb(request)
     result = kb.score_fraud(payload.telemetry.model_dump())
     return FraudScoreResponse(**result)
+
+
+@app.post("/api/export-csv")
+async def api_export_csv(payload: CsvExportRequest):
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=CSV_EXPORT_FIELDS)
+    writer.writeheader()
+    for document in payload.docs:
+        writer.writerow(_csv_row(document))
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="document_export.csv"'},
+    )
 
 
 @app.post("/api/vector-store/reconnect", response_model=StatusResponse)

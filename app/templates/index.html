@@ -169,7 +169,7 @@
 
           <div class="form-actions">
             <button class="button button-primary" type="submit">Search</button>
-            <button class="button button-secondary" type="button" id="use-search-query">Use in explainability</button>
+          <button class="button button-secondary" type="button" data-copy-search-query>Use in explainability</button>
             <button class="button button-secondary" type="button" id="export-search-csv">Export CSV</button>
             <button class="button button-ghost" type="button" id="clear-search">Clear</button>
           </div>
@@ -261,6 +261,45 @@
         </div>
         <div id="related-results" class="results-list empty-state">
           Select a document to discover similar knowledge bases.
+        </div>
+      </section>
+
+      <section class="panel compare-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Decision support</p>
+            <h2>Compare candidates side by side</h2>
+          </div>
+          <span class="section-badge">Shortlist analytics</span>
+        </div>
+
+        <div class="detail-grid">
+          <label class="field">
+            <span>Candidate A</span>
+            <select id="compare-candidate-a"></select>
+          </label>
+          <label class="field">
+            <span>Candidate B</span>
+            <select id="compare-candidate-b"></select>
+          </label>
+          <label class="field">
+            <span>Job context</span>
+            <select id="compare-job"></select>
+          </label>
+          <label class="field">
+            <span>Mode</span>
+            <input type="text" value="Semantic fit + skill gaps" disabled>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="button" id="compare-button">Compare Candidates</button>
+          <button class="button button-secondary" type="button" id="compare-use-top-two">Use Top Two</button>
+          <button class="button button-ghost" type="button" id="compare-clear-button">Clear</button>
+        </div>
+
+        <div id="comparison-output" class="answer-output empty-state">
+          Pick two candidates and a role to generate a head-to-head decision brief.
         </div>
       </section>
 
@@ -361,7 +400,7 @@
 
           <div class="form-actions">
             <button class="button button-primary" type="submit">Ask model</button>
-            <button class="button button-secondary" type="button" id="use-search-query">Use search query</button>
+            <button class="button button-secondary" type="button" data-copy-search-query>Use search query</button>
           </div>
         </form>
 
