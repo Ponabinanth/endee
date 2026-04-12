@@ -29,14 +29,15 @@ def _hash_embedding(text: str, dimensions: int = 384) -> list[float]:
 
 
 class Embedder:
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, backend: str = "hash") -> None:
         self.model_name = model_name
+        self.preferred_backend = (backend or "hash").strip().lower()
         self._model = None
-        self.backend = "hash"
+        self.backend = "sentence-transformers" if self.preferred_backend == "sentence-transformers" else "hash"
         self.load_error: str | None = None
 
     def _load_model(self) -> None:
-        if self._model is not None:
+        if self._model is not None or self.preferred_backend != "sentence-transformers":
             return
 
         try:
@@ -48,6 +49,7 @@ class Embedder:
             self._model = None
             self.backend = "hash"
             self.load_error = str(exc)
+            self.preferred_backend = "hash"
 
     def embed(self, text: str) -> list[float]:
         self._load_model()
@@ -65,4 +67,3 @@ class Embedder:
 
     def embed_many(self, texts: Iterable[str]) -> list[list[float]]:
         return [self.embed(text) for text in texts]
-

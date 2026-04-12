@@ -30,6 +30,8 @@ const STORAGE_KEYS = {
 const els = {
   statusPill: document.getElementById("status-pill"),
   metricVector: document.getElementById("metric-vector"),
+  metricVectorState: document.getElementById("metric-vector-state"),
+  metricVectorNote: document.getElementById("metric-vector-note"),
   metricBackend: document.getElementById("metric-backend"),
   metricModel: document.getElementById("metric-model"),
   metricCandidates: document.getElementById("metric-candidates"),
@@ -51,6 +53,7 @@ const els = {
   examplePrompts: document.getElementById("example-prompts"),
   samplePromptButton: document.getElementById("sample-prompt-button"),
   refreshButton: document.getElementById("refresh-button"),
+  reconnectVectorButton: document.getElementById("reconnect-vector-button"),
   resetSessionButton: document.getElementById("reset-session-button"),
   clearSearchButton: document.getElementById("clear-search"),
   useSearchQueryButton: document.getElementById("use-search-query"),
@@ -168,6 +171,8 @@ function upsertById(list, item, idKey) {
 function setStatus(status) {
   state.ready = Boolean(status.ready);
   els.metricVector.textContent = status.vector_store_backend || "n/a";
+  els.metricVectorState.textContent = status.vector_store_state || "n/a";
+  els.metricVectorNote.textContent = status.vector_store_note || status.index_name || "n/a";
   els.metricBackend.textContent = status.embedding_backend || "n/a";
   els.metricModel.textContent = status.embedding_model || "n/a";
   els.metricCandidates.textContent = status.sample_candidates ?? 0;
@@ -175,8 +180,23 @@ function setStatus(status) {
 
   els.statusPill.className = "status-pill";
   if (state.ready) {
-    els.statusPill.classList.add("status-ready");
-    els.statusPill.textContent = "Vector store online and hiring corpus indexed.";
+    const connectionState = (status.vector_store_state || "").toLowerCase();
+    if (connectionState === "connected") {
+      els.statusPill.classList.add("status-ready");
+      els.statusPill.textContent = "Endee connected and semantic indexing is live.";
+    } else if (connectionState === "fallback") {
+      els.statusPill.classList.add("status-warning");
+      els.statusPill.textContent = status.vector_store_note || "Endee unavailable; using the local fallback store.";
+    } else if (connectionState === "local") {
+      els.statusPill.classList.add("status-ready");
+      els.statusPill.textContent = "Running on the local in-memory vector store.";
+    } else if (connectionState === "reconnecting") {
+      els.statusPill.classList.add("status-pending");
+      els.statusPill.textContent = status.vector_store_note || "Reconnecting to Endee...";
+    } else {
+      els.statusPill.classList.add("status-ready");
+      els.statusPill.textContent = "Vector store online and corpus indexed.";
+    }
   } else if (status.error) {
     els.statusPill.classList.add("status-error");
     els.statusPill.textContent = `Bootstrap issue: ${status.error}`;
@@ -724,6 +744,17 @@ async function refreshStatus() {
   setStatus(status);
   populateFilterSelects(state.filters);
   renderPromptChips(state.examples);
+}
+
+async function reconnectVectorStore() {
+  const status = await postJson("/api/vector-store/reconnect", {});
+  state.filters = status.filters || state.filters;
+  state.examples = status.examples || state.examples;
+  setStatus(status);
+  populateFilterSelects(state.filters);
+  renderPromptChips(state.examples);
+  await refreshEntities();
+  showToast(status.vector_store_note || "Vector store reconnected.");
 }
 
 async function refreshEntities() {
@@ -1290,6 +1321,14 @@ document.addEventListener("DOMContentLoaded", () => {
       await refreshStatus();
       await refreshEntities();
       showToast("Status refreshed.");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.reconnectVectorButton.addEventListener("click", async () => {
+    try {
+      await reconnectVectorStore();
     } catch (error) {
       showToast(error.message, "error");
     }

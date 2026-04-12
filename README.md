@@ -1,6 +1,6 @@
-# AI Smart Document Assistant (RAG using Endee)
+# Endee Atlas (RAG using Endee)
 
-AI Smart Document Assistant is a RAG-based platform built with FastAPI and [Endee](https://github.com/endee-io/endee) as the vector database. It turns complex documents into embeddings, performs semantic search, ranks information with explainable scoring, and generates grounded AI insights.
+Endee Atlas is a RAG-based platform built with FastAPI and [Endee](https://github.com/endee-io/endee) as the vector database. It turns complex documents into embeddings, performs semantic search, ranks information with explainable scoring, and generates grounded AI insights.
 
 The project is designed as a practical AI/ML demo for recruitment teams. It demonstrates:
 
@@ -10,10 +10,11 @@ The project is designed as a practical AI/ML demo for recruitment teams. It demo
 - Interview evaluation with fraud and cheating signals
 - Resume improvement suggestions for shortlisted roles
 - Retrieval-augmented explanations for HR decisions
+- A live Endee connection path with a browser reconnect action
 
 ## What It Solves
 
-Traditional workflows depend heavily on keywords and manual review. AI Smart Document Assistant uses embeddings plus Endee retrieval to help users:
+Traditional workflows depend heavily on keywords and manual review. Endee Atlas uses embeddings plus Endee retrieval to help users:
 
 - Find candidates by meaning, not keyword overlap
 - Compare applicants against a role using transparent scoring
@@ -63,6 +64,7 @@ Endee is the vector database for the whole project.
   - Retrieval-grounded recruiter explanations
 
 If Endee is unavailable, the app falls back to an in-memory vector store so the demo still runs locally and the tests remain deterministic.
+If Endee comes online later, use the `Reconnect Endee` button in the header to switch back to the real vector store and reindex the loaded corpus.
 
 ## Features
 
@@ -117,7 +119,8 @@ docker compose up --build
 ```
 
 - Endee runs on `http://localhost:8080`
-- TalentForge AI runs on `http://localhost:8000`
+- The app prefers Endee, waits briefly for it at startup, and reconnects from the UI if needed
+- Endee Atlas runs on `http://localhost:8000`
 
 ### 3. Run locally without Docker
 
@@ -143,16 +146,21 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Copy `.env.example` to `.env` and edit it if needed.
 
-- `APP_NAME` defaults to `TalentForge AI`
+- `APP_NAME` defaults to `Endee Atlas`
 - `ENDEE_BASE_URL` defaults to `http://localhost:8080/api/v1`
 - `ENDEE_INDEX_NAME` defaults to `talentforge_hiring`
 - `VECTOR_STORE_BACKEND` defaults to `auto`
-- `EMBEDDING_MODEL` defaults to `sentence-transformers/all-MiniLM-L6-v2`
+- `EMBEDDING_BACKEND` defaults to `hash` for an offline-safe local run
+- `EMBEDDING_MODEL` is only used when `EMBEDDING_BACKEND=sentence-transformers`
+- `ENDEE_BOOTSTRAP_TIMEOUT_SECONDS` controls how long the app waits for Endee when `VECTOR_STORE_BACKEND=endee`
+- `ENDEE_BOOTSTRAP_INTERVAL_SECONDS` controls the retry delay while waiting for Endee
 - `OPENAI_API_KEY` enables richer grounded explanations
 - `OPENAI_MODEL` controls the optional chat model
 - `SEED_SAMPLE_DATA` preloads sample candidates and job roles
 
 If `OPENAI_API_KEY` is not set, the app still works and falls back to deterministic explainability and interview generation.
+If `EMBEDDING_BACKEND` is left at the default `hash`, the app starts immediately without downloading models.
+If Endee is not available at startup, the homepage shows the fallback state and the UI keeps the reconnect action visible.
 
 ## Running Tests
 

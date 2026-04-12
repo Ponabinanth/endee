@@ -15,14 +15,15 @@
   <div class="app-shell">
     <header class="hero panel">
       <div class="hero-copy">
-        <div class="eyebrow">Endee-powered Smart Document System</div>
+        <div class="eyebrow">Endee-powered semantic intelligence studio</div>
         <h1>{{ app_name }}</h1>
         <p class="hero-subtitle">
-          Index documentation semantically, rank whitepapers with explainable AI, retrieve grounded answers, and run security compliance checks in one command center.
+          Connect Endee as the live vector database, index documents semantically, rank evidence with explainable AI, and keep the reconnect path visible so the stack always feels intentional.
         </p>
         <div class="hero-actions">
           <button class="button button-primary" type="button" id="sample-prompt-button">Load sample prompt</button>
           <button class="button button-secondary" type="button" id="refresh-button">Refresh status</button>
+          <button class="button button-secondary" type="button" id="reconnect-vector-button">Reconnect Endee</button>
           <button class="button button-ghost" type="button" id="reset-session-button">Reset query session</button>
         </div>
         <div id="status-pill" class="status-pill status-pending">Checking vector store...</div>
@@ -33,6 +34,11 @@
           <span class="metric-label">Vector store</span>
           <strong id="metric-vector">{{ status.vector_store_backend }}</strong>
           <span class="metric-caption" id="metric-index">{{ status.index_name }}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Connection state</span>
+          <strong id="metric-vector-state">{{ status.vector_store_state }}</strong>
+          <span class="metric-caption" id="metric-vector-note">{{ status.vector_store_note }}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">Embedding backend</span>

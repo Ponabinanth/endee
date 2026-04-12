@@ -32,7 +32,7 @@ class KnowledgeBase:
         self.settings = settings
         from app.embeddings import Embedder
 
-        self.embedder = Embedder(settings.embedding_model)
+        self.embedder = Embedder(settings.embedding_model, settings.embedding_backend)
         self._vector_store = select_vector_store(
             backend=settings.vector_store_backend,
             endee_base_url=settings.endee_base_url,
@@ -46,6 +46,11 @@ class KnowledgeBase:
         self._jobs: dict[str, JobRole] = {}
         self._interviews: dict[tuple[str, str], dict[str, Any]] = {}
         self._telemetry: dict[tuple[str, str], dict[str, Any]] = {}
+        self._vector_store_state = "initializing"
+        self._vector_store_note = "Preparing vector store connection."
+        self._vector_store_attempts = 0
+        self._seeded_candidates = 0
+        self._seeded_jobs = 0
 
     @property
     def vector_store_backend(self) -> str:
@@ -62,6 +67,12 @@ class KnowledgeBase:
         self._bootstrap_error = f"Endee unavailable; using in-memory vector store. Error: {exc}"
         self._vector_store = InMemoryVectorStore()
         self._index = None
+        self._vector_store_state = "fallback"
+        self._vector_store_note = f"Endee unavailable; using in-memory vector store. Error: {exc}"
+
+    def _update_vector_store_state(self, state: str, note: str) -> None:
+        self._vector_store_state = state
+        self._vector_store_note = note
 
     def ensure_index(self) -> None:
         try:
@@ -80,11 +91,52 @@ class KnowledgeBase:
             message = str(exc).lower()
             if "already exists" in message or "exists" in message:
                 return
-            if self.vector_store_backend == "endee":
-                self._fallback_to_memory(exc)
-                self._vector_store.create_index(name=self.settings.endee_index_name, dimension=384, space_type="cosine")
-                return
             raise
+
+    def _wait_for_endee_index(self) -> None:
+        timeout = max(0.0, float(self.settings.endee_bootstrap_timeout_seconds))
+        interval = max(0.1, float(self.settings.endee_bootstrap_interval_seconds))
+        deadline = time.monotonic() + timeout
+        attempts = 0
+
+        while True:
+            attempts += 1
+            self._vector_store_attempts = attempts
+            try:
+                self.ensure_index()
+                self._update_vector_store_state(
+                    "connected",
+                    f"Connected to Endee at {self.settings.endee_base_url}.",
+                )
+                return
+            except Exception as exc:
+                message = str(exc).lower()
+                if "already exists" in message or "exists" in message:
+                    self._update_vector_store_state(
+                        "connected",
+                        f"Endee index '{self.settings.endee_index_name}' is ready.",
+                    )
+                    return
+                if time.monotonic() >= deadline:
+                    raise exc
+                logger.warning(
+                    "Endee not ready yet (attempt %s). Retrying in %ss.",
+                    attempts,
+                    interval,
+                )
+                time.sleep(interval)
+
+    def _reindex_materialized_corpus(self) -> tuple[int, int]:
+        candidate_count = 0
+        job_count = 0
+        if not self._candidates and not self._jobs and self.settings.seed_sample_data:
+            return self.seed_sample_corpus()
+
+        for candidate in list(self._candidates.values()):
+            candidate_count += int(self.upsert_candidate(asdict(candidate)).get("chunks_indexed") or 0)
+        for job in list(self._jobs.values()):
+            job_count += int(self.upsert_job(asdict(job)).get("chunks_indexed") or 0)
+        return candidate_count, job_count
 
     def _next_id(self, prefix: str) -> str:
         return f"{prefix}-{len(self._candidates) + len(self._jobs) + 1:04d}"
@@ -266,11 +318,22 @@ class KnowledgeBase:
 
     def bootstrap(self) -> None:
         try:
-            self.ensure_index()
+            if self.vector_store_backend == "endee":
+                try:
+                    self._wait_for_endee_index()
+                except Exception as exc:
+                    self._fallback_to_memory(exc)
+                    self.ensure_index()
+            else:
+                self.ensure_index()
+                self._update_vector_store_state("local", "Running on the in-memory vector store.")
             if self.settings.seed_sample_data:
                 candidate_count, job_count = self.seed_sample_corpus()
             else:
                 candidate_count, job_count = 0, 0
+            if self.vector_store_backend == "memory":
+                self._update_vector_store_state("local", "Running on the in-memory vector store.")
+            self._vector_store_attempts = max(self._vector_store_attempts, 1)
             self._bootstrapped = True
             self._bootstrap_error = None
             self._last_bootstrap_at = time.time()
@@ -286,9 +349,46 @@ class KnowledgeBase:
         except Exception as exc:  # pragma: no cover
             logger.exception("Bootstrap failed")
             self._bootstrap_error = str(exc)
-            if self.settings.vector_store_backend == "auto" and self.vector_store_backend != "memory":
-                self._fallback_to_memory(exc)
-                self.bootstrap()
+
+    def reconnect_vector_store(self) -> dict[str, Any]:
+        self._vector_store = select_vector_store(
+            backend=self.settings.vector_store_backend,
+            endee_base_url=self.settings.endee_base_url,
+            endee_auth_token=self.settings.endee_auth_token,
+        )
+        self._index = None
+        self._bootstrapped = False
+        self._bootstrap_error = None
+        self._vector_store_attempts = 0
+        self._update_vector_store_state("reconnecting", "Reconnecting to the configured vector store.")
+
+        try:
+            if self.vector_store_backend == "endee":
+                try:
+                    self._wait_for_endee_index()
+                except Exception as exc:
+                    self._fallback_to_memory(exc)
+                    self.ensure_index()
+            else:
+                self.ensure_index()
+                self._update_vector_store_state("local", "Running on the in-memory vector store.")
+
+            if self._candidates or self._jobs:
+                self._reindex_materialized_corpus()
+            elif self.settings.seed_sample_data:
+                self.seed_sample_corpus()
+
+            self._vector_store_attempts = max(self._vector_store_attempts, 1)
+            self._bootstrapped = True
+            self._bootstrap_error = None
+            self._last_bootstrap_at = time.time()
+            self._seeded_candidates = len(self._candidates)
+            self._seeded_jobs = len(self._jobs)
+        except Exception as exc:
+            self._bootstrap_error = str(exc)
+            self._update_vector_store_state("fallback", f"Reconnect failed: {exc}")
+
+        return self.status()
 
     def status(self) -> dict[str, Any]:
         catalog = filter_catalog()
@@ -304,6 +404,9 @@ class KnowledgeBase:
             "index_name": self.settings.endee_index_name,
             "endee_base_url": self.settings.endee_base_url,
             "vector_store_backend": self.vector_store_backend,
+            "vector_store_state": self._vector_store_state,
+            "vector_store_note": self._vector_store_note,
+            "vector_store_attempts": self._vector_store_attempts,
             "embedding_model": self.settings.embedding_model,
             "embedding_backend": self.embedder.backend,
             "sample_candidates": len(self._candidates),

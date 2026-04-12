@@ -111,8 +111,9 @@ def _to_citation(result: dict[str, object], label: str) -> AnswerCitation:
 async def home(request: Request):
     status = request.app.state.kb.status()
     return templates.TemplateResponse(
-        "index.html",
-        {
+        request=request,
+        name="index.html",
+        context={
             "request": request,
             "app_name": settings.app_name,
             "status": status,
@@ -231,6 +232,13 @@ async def api_fraud_score(payload: FraudScoreRequest, request: Request):
     kb = get_kb(request)
     result = kb.score_fraud(payload.telemetry.model_dump())
     return FraudScoreResponse(**result)
+
+
+@app.post("/api/vector-store/reconnect", response_model=StatusResponse)
+async def api_vector_store_reconnect(request: Request):
+    kb = get_kb(request)
+    status = kb.reconnect_vector_store()
+    return StatusResponse(**status)
 
 
 @app.post("/api/jobs", response_model=JobSnapshot)

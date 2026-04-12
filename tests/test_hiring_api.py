@@ -12,6 +12,12 @@ class HiringApiTests(unittest.TestCase):
             self.assertIn("ready", status)
             self.assertTrue(status["ready"])
             self.assertIn(status["vector_store_backend"], {"memory", "endee"})
+            self.assertIn(status["vector_store_state"], {"local", "connected", "fallback", "reconnecting"})
+            self.assertIn("vector_store_note", status)
+
+            reconnect = client.post("/api/vector-store/reconnect").json()
+            self.assertTrue(reconnect["ready"])
+            self.assertIn(reconnect["vector_store_state"], {"local", "connected", "fallback"})
 
             search = client.post("/api/search", json={"query": "Python ML engineer with RAG", "role": "all", "location": "all", "stage": "all", "top_k": 5}).json()
             self.assertIn("results", search)
@@ -37,4 +43,3 @@ class HiringApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

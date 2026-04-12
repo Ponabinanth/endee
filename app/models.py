@@ -83,6 +83,9 @@ class StatusResponse(BaseModel):
     index_name: str
     endee_base_url: str
     vector_store_backend: str
+    vector_store_state: str
+    vector_store_note: str
+    vector_store_attempts: int = 0
     embedding_model: str
     embedding_backend: str
     sample_candidates: int

@@ -274,6 +274,12 @@ body::before {
   letter-spacing: 0.05em;
 }
 
+.metric-caption {
+  display: block;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .metric-card strong {
   display: block;
   margin: 10px 0 5px;
@@ -446,6 +452,11 @@ body::before {
 }
 
 .status-pending { color: #ffd166; }
+.status-warning { color: #ffd166; border-color: rgba(255, 209, 102, 0.4); }
+.status-warning::before {
+  background: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.8);
+}
 .status-error { color: var(--warning); border-color: rgba(255, 71, 126, 0.4); }
 
 .empty-state {
