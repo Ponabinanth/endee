@@ -15,15 +15,15 @@
   <div class="app-shell">
     <header class="hero panel">
       <div class="hero-copy">
-        <div class="eyebrow">Endee-powered autonomous hiring</div>
+        <div class="eyebrow">Endee-powered Smart Document System</div>
         <h1>{{ app_name }}</h1>
         <p class="hero-subtitle">
-          Screen resumes semantically, rank candidates with explainable AI, generate interview questions, and surface fraud signals in one command center.
+          Index documentation semantically, rank whitepapers with explainable AI, retrieve grounded answers, and run security compliance checks in one command center.
         </p>
         <div class="hero-actions">
           <button class="button button-primary" type="button" id="sample-prompt-button">Load sample prompt</button>
           <button class="button button-secondary" type="button" id="refresh-button">Refresh status</button>
-          <button class="button button-ghost" type="button" id="reset-session-button">Reset interview session</button>
+          <button class="button button-ghost" type="button" id="reset-session-button">Reset query session</button>
         </div>
         <div id="status-pill" class="status-pill status-pending">Checking vector store...</div>
       </div>
@@ -41,8 +41,8 @@
         </div>
         <div class="metric-card">
           <span class="metric-label">Seeded corpus</span>
-          <strong><span id="metric-candidates">{{ status.sample_candidates }}</span> candidates</strong>
-          <span class="metric-caption"><span id="metric-jobs">{{ status.sample_jobs }}</span> job roles indexed</span>
+          <strong><span id="metric-candidates">{{ status.sample_candidates }}</span> documents</strong>
+          <span class="metric-caption"><span id="metric-jobs">{{ status.sample_jobs }}</span> query profiles</span>
         </div>
       </div>
     </header>
@@ -51,26 +51,26 @@
       <section class="panel intake-panel">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Candidate intake</p>
-            <h2>Upload and enrich a resume</h2>
+            <p class="section-kicker">Document intake</p>
+            <h2>Upload and enrich a document</h2>
           </div>
-          <span class="section-badge">TXT / MD resumes</span>
+          <span class="section-badge">TXT / MD files</span>
         </div>
 
         <form id="upload-form" class="form-stack">
           <label class="field">
-            <span>Resume files</span>
+            <span>Document files</span>
             <input id="upload-files" name="files" type="file" accept=".txt,.md,.markdown" multiple>
           </label>
 
           <div class="detail-grid">
             <label class="field">
-              <span>Candidate name</span>
-              <input id="candidate-name" name="candidate_name" type="text" placeholder="Priya Shah">
+              <span>Document Title</span>
+              <input id="candidate-name" name="candidate_name" type="text" placeholder="API Security Standard v2">
             </label>
             <label class="field">
-              <span>Target role</span>
-              <input id="candidate-target-role" name="target_role" type="text" placeholder="Senior AI Engineer">
+              <span>Domain / Category</span>
+              <input id="candidate-target-role" name="target_role" type="text" placeholder="Engineering Standards">
             </label>
             <label class="field">
               <span>Years of experience</span>
@@ -101,7 +101,7 @@
         </form>
 
         <div id="feedback-output" class="answer-output empty-state">
-          Upload a resume and then use the interview lab to generate tailored resume suggestions.
+          Upload a document and then use the intelligence lab to generate tailored compliance suggestions.
         </div>
       </section>
 
@@ -109,7 +109,7 @@
         <div class="section-head">
           <div>
             <p class="section-kicker">Semantic search</p>
-            <h2>Find candidates by meaning, not keywords</h2>
+            <h2>Find documents by meaning, not keywords</h2>
           </div>
           <span class="section-badge">Endee similarity</span>
         </div>
@@ -117,7 +117,7 @@
         <form id="search-form" class="form-stack">
           <label class="field">
             <span>Search query</span>
-            <input id="search-query" name="query" type="text" placeholder="Python developer with ML and 2 years experience">
+            <input id="search-query" name="query" type="text" placeholder="Find scaling and resilience standards for Kubernetes">
           </label>
 
           <div class="detail-grid">
@@ -147,6 +147,7 @@
           <div class="form-actions">
             <button class="button button-primary" type="submit">Search</button>
             <button class="button button-secondary" type="button" id="use-search-query">Use in explainability</button>
+            <button class="button button-secondary" type="button" id="export-search-csv">Export CSV</button>
             <button class="button button-ghost" type="button" id="clear-search">Clear</button>
           </div>
         </form>
@@ -155,8 +156,8 @@
       <section class="panel rank-panel">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Role design</p>
-            <h2>Create a job and rank candidates</h2>
+            <p class="section-kicker">Query Profile Design</p>
+            <h2>Create a profile and rank documents</h2>
           </div>
           <span class="section-badge">Explainable scores</span>
         </div>
@@ -164,12 +165,12 @@
         <form id="job-form" class="form-stack">
           <div class="detail-grid">
             <label class="field">
-              <span>Job title</span>
-              <input id="job-title" name="title" type="text" placeholder="Senior AI Engineer" value="Senior AI Engineer">
+              <span>Query Title</span>
+              <input id="job-title" name="title" type="text" placeholder="Distributed Systems Specification" value="Distributed Systems Specification">
             </label>
             <label class="field">
               <span>Department</span>
-              <input id="job-department" name="department" type="text" value="engineering">
+              <input id="job-department" name="department" type="text" value="architecture">
             </label>
             <label class="field">
               <span>Location</span>
@@ -198,18 +199,19 @@
           </div>
 
           <label class="field">
-            <span>Interview focus</span>
-            <input id="job-focus" name="interview_focus" type="text" placeholder="retrieval quality, explainability, evaluation" value="retrieval quality, explainability, evaluation">
+            <span>Primary Focus</span>
+            <input id="job-focus" name="interview_focus" type="text" placeholder="event sourcing, scalability, kubernetes" value="event sourcing, scalability, kubernetes">
           </label>
 
           <div class="form-actions">
-            <button class="button button-secondary" type="button" id="create-job-button">Create role</button>
-            <button class="button button-primary" type="button" id="rank-button">Rank candidates</button>
+            <button class="button button-secondary" type="button" id="create-job-button">Save Profile</button>
+            <button class="button button-primary" type="button" id="rank-button">Rank Documents</button>
+            <button class="button button-secondary" type="button" id="export-rank-csv">Export CSV</button>
           </div>
         </form>
 
         <div id="rank-results" class="results-list empty-state">
-          Rank a role to see explainable candidate scores.
+          Rank a query profile to see explainable document match scores.
         </div>
       </section>
 
@@ -222,7 +224,7 @@
           <span class="section-badge" id="results-count">0 results</span>
         </div>
         <div id="search-results" class="results-list empty-state">
-          Run a search to surface the strongest resumes from Endee.
+          Run a search to surface the most relevant documentation.
         </div>
       </section>
 
@@ -230,31 +232,31 @@
         <div class="section-head">
           <div>
             <p class="section-kicker">Recommendations</p>
-            <h2>Similar candidates</h2>
+            <h2>Similar Documents</h2>
           </div>
           <span class="section-badge">Vector proximity</span>
         </div>
         <div id="related-results" class="results-list empty-state">
-          Select a candidate to discover similar profiles.
+          Select a document to discover similar knowledge bases.
         </div>
       </section>
 
       <section class="panel interview-panel">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Interview lab</p>
-            <h2>Generate, evaluate, and flag fraud</h2>
+            <p class="section-kicker">Intelligence lab</p>
+            <h2>Generate summaries, answer evaluations, and flag anomalies</h2>
           </div>
-          <span class="section-badge">Adaptive questions</span>
+          <span class="section-badge">Adaptive checking</span>
         </div>
 
         <div class="detail-grid">
           <label class="field">
-            <span>Candidate</span>
+            <span>Target Document</span>
             <select id="interview-candidate"></select>
           </label>
           <label class="field">
-            <span>Job role</span>
+            <span>Query Profile</span>
             <select id="interview-job"></select>
           </label>
           <label class="field">
@@ -276,19 +278,22 @@
         </div>
 
         <div class="form-actions">
-          <button class="button button-primary" type="button" id="generate-interview-button">Generate questions</button>
-          <button class="button button-secondary" type="button" id="evaluate-interview-button">Evaluate answers</button>
-          <button class="button button-ghost" type="button" id="resume-feedback-button">Resume feedback</button>
-          <button class="button button-ghost" type="button" id="fraud-check-button">Check fraud</button>
+          <button class="button button-primary" type="button" id="generate-summary-button">Generate Exec Summary</button>
+          <button class="button button-secondary" type="button" id="generate-interview-button">Generate Audit Checks</button>
+          <button class="button button-secondary" type="button" id="evaluate-interview-button">Evaluate Coverage</button>
+          <button class="button button-ghost" type="button" id="resume-feedback-button">Doc Feedback</button>
           <button class="button button-ghost" type="button" id="reset-interview-button">Reset</button>
         </div>
 
         <div id="telemetry-panel" class="telemetry-grid"></div>
+        <div id="document-summary" class="answer-output empty-state" style="margin-bottom: 20px;">
+          Generated Executive Summary will appear here.
+        </div>
         <div id="interview-questions" class="question-list empty-state">
-          Generate interview questions to unlock adaptive scoring.
+          Generate audit checks to unlock adaptive scoring.
         </div>
         <div id="interview-result" class="answer-output empty-state">
-          Interview scores and fraud signals will appear here.
+          Evaluation scores and anomalies will appear here.
         </div>
       </section>
 

@@ -1,6 +1,6 @@
-# TalentForge AI
+# AI Smart Document Assistant (RAG using Endee)
 
-TalentForge AI is an autonomous hiring platform built with FastAPI and [Endee](https://github.com/endee-io/endee) as the vector database. It turns resumes and job descriptions into embeddings, performs semantic candidate search, ranks applicants with explainable scoring, generates interview questions, and flags suspicious interview behavior.
+AI Smart Document Assistant is a RAG-based platform built with FastAPI and [Endee](https://github.com/endee-io/endee) as the vector database. It turns complex documents into embeddings, performs semantic search, ranks information with explainable scoring, and generates grounded AI insights.
 
 The project is designed as a practical AI/ML demo for recruitment teams. It demonstrates:
 
@@ -13,7 +13,7 @@ The project is designed as a practical AI/ML demo for recruitment teams. It demo
 
 ## What It Solves
 
-Traditional hiring workflows depend heavily on keywords and manual review. TalentForge AI uses embeddings plus Endee retrieval to help recruiters:
+Traditional workflows depend heavily on keywords and manual review. AI Smart Document Assistant uses embeddings plus Endee retrieval to help users:
 
 - Find candidates by meaning, not keyword overlap
 - Compare applicants against a role using transparent scoring
@@ -136,7 +136,7 @@ docker run -p 8080:8080 -v ./endee-data:/data --name endee-server endeeio/endee-
 Then launch the app:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 4. Environment Variables

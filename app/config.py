@@ -7,7 +7,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "TalentForge AI"))
+    app_name: str = field(default_factory=lambda: os.getenv("APP_NAME", "AI Smart Document Assistant"))
     endee_base_url: str = field(
         default_factory=lambda: os.getenv("ENDEE_BASE_URL", "http://localhost:8080/api/v1")
     )

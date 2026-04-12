@@ -69,7 +69,7 @@ def ensure_ready(request: Request) -> None:
         raise HTTPException(
             status_code=503,
             detail={
-                "message": "TalentForge AI is still initializing.",
+                "message": f"{request.app.title} is still initializing.",
                 "error": error,
                 "suggestion": "The app will fall back to the local vector store if Endee is unavailable.",
             },

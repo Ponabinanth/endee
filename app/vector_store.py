@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import math
+import socket
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -150,6 +152,20 @@ class InMemoryVectorStore(VectorStore):
         return self._indexes[name]
 
 
+def _is_reachable(url: str, timeout: float = 1.0) -> bool:
+    """Quick check to see if the vector store host is listening."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, socket.error):
+        return False
+    except Exception:
+        return False
+
+
 def select_vector_store(
     *,
     backend: str,
@@ -168,6 +184,11 @@ def select_vector_store(
 
     if normalized in {"auto", "endee"}:
         try:
+            if normalized == "auto" and not _is_reachable(endee_base_url):
+                logger.warning(
+                    "Endee service not reachable at %s. Falling back to in-memory store.", endee_base_url
+                )
+                return InMemoryVectorStore()
             return EndeeVectorStore(base_url=endee_base_url, auth_token=endee_auth_token)
         except Exception as exc:
             if normalized == "endee":
@@ -188,4 +209,3 @@ def batched(items: Iterable[dict[str, Any]], batch_size: int) -> Iterable[list[d
             batch = []
     if batch:
         yield batch
-

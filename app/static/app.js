@@ -23,8 +23,8 @@ const state = {
 };
 
 const STORAGE_KEYS = {
-  candidates: "hirepilot.candidates.v1",
-  jobs: "hirepilot.jobs.v1",
+  candidates: "smartdoc.candidates.v1",
+  jobs: "smartdoc.jobs.v1",
 };
 
 const els = {
@@ -84,8 +84,11 @@ const els = {
   generateInterviewButton: document.getElementById("generate-interview-button"),
   evaluateInterviewButton: document.getElementById("evaluate-interview-button"),
   resumeFeedbackButton: document.getElementById("resume-feedback-button"),
-  fraudCheckButton: document.getElementById("fraud-check-button"),
+  generateSummaryButton: document.getElementById("generate-summary-button"),
   resetInterviewButton: document.getElementById("reset-interview-button"),
+  exportSearchCsvButton: document.getElementById("export-search-csv"),
+  exportRankCsvButton: document.getElementById("export-rank-csv"),
+  documentSummary: document.getElementById("document-summary"),
   interviewCandidate: document.getElementById("interview-candidate"),
   interviewJob: document.getElementById("interview-job"),
   searchRole: document.getElementById("search-role"),
@@ -256,16 +259,31 @@ function formatSimilarity(result, kind) {
   return result.similarity_label || `Similarity ${clampNumber(result.score, 0).toFixed(3)}`;
 }
 
+function renderScoreBar(label, value) {
+  const percent = clampNumber(value, 0).toFixed(0);
+  return `
+    <div class="score-bar-group">
+      <div class="score-bar-header">
+        <span class="score-bar-label">${escapeHtml(label)}</span>
+        <span class="score-bar-value">${percent}%</span>
+      </div>
+      <div class="score-bar-bg">
+        <div class="score-bar-fill" style="width: ${percent}%"></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderScoreBreakdown(breakdown) {
   if (!breakdown) {
     return "";
   }
   return `
-    <div class="chip-row score-row">
-      <span class="chip">Semantic ${Number(breakdown.semantic || 0).toFixed(1)}</span>
-      <span class="chip">Skills ${Number(breakdown.skills || 0).toFixed(1)}</span>
-      <span class="chip">Experience ${Number(breakdown.experience || 0).toFixed(1)}</span>
-      <span class="chip">Location ${Number(breakdown.location || 0).toFixed(1)}</span>
+    <div class="advanced-score-grid">
+      ${renderScoreBar("Semantic", breakdown.semantic_score || breakdown.semantic)}
+      ${renderScoreBar("Technical", breakdown.skill_score || breakdown.skills)}
+      ${renderScoreBar("Experience", breakdown.experience_score || breakdown.experience)}
+      ${renderScoreBar("Culture/Loc", breakdown.location_score || breakdown.location)}
     </div>
   `;
 }
@@ -331,6 +349,7 @@ function candidateSnapshotFromState(candidate) {
     return null;
   }
   return {
+    id: candidate.candidate_id || candidate.id,
     candidate_id: candidate.candidate_id || candidate.id,
     name: candidate.name,
     headline: candidate.headline || "",
@@ -349,6 +368,7 @@ function jobSnapshotFromState(job) {
     return null;
   }
   return {
+    id: job.job_id || job.id,
     job_id: job.job_id || job.id,
     title: job.title,
     description: job.description || "",
@@ -362,8 +382,10 @@ function jobSnapshotFromState(job) {
 }
 
 function jobSnapshotFromForm() {
+  const id = `job_${Math.random().toString(16).slice(2)}`;
   return {
-    job_id: null,
+    id: id,
+    job_id: id,
     title: els.jobTitle.value.trim() || "Untitled Role",
     description: els.jobDescription.value.trim() || "Role description not provided.",
     department: els.jobDepartment.value.trim() || "engineering",
@@ -399,11 +421,14 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
     card.innerHTML = `
       <div class="result-top">
         <div>
-          <h3 class="result-title">${escapeHtml(result.name || result.title || "Untitled candidate")}</h3>
+          <div class="result-header-row">
+            <h3 class="result-title">${escapeHtml(result.name || result.title || "Untitled candidate")}</h3>
+            <span class="id-badge">${escapeHtml(result.id?.slice(0, 8) || "NEW")}</span>
+          </div>
           <p class="result-subtitle">${escapeHtml(result.headline || result.excerpt || "")}</p>
           <div class="result-meta">
-            <span class="chip">${escapeHtml(result.target_role || "n/a")}</span>
-            <span class="chip">${escapeHtml(result.location || "n/a")}</span>
+            <span class="chip chip-outline">${escapeHtml(result.target_role || "n/a")}</span>
+            <span class="chip chip-outline">${escapeHtml(result.location || "n/a")}</span>
             <span class="chip">${escapeHtml(Number(result.years_experience || 0).toFixed(1))} yrs</span>
             <span class="chip">${escapeHtml((result.skills || []).slice(0, 4).join(", ") || "skills n/a")}</span>
           </div>
@@ -451,29 +476,32 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
 }
 
 function renderAnswer(payload) {
+  const metaMarkup = `
+    <div class="ai-metadata">
+      <span>Engine: ${escapeHtml(payload.mode || "RAG")}</span>
+      <span>Reference Count: ${payload.citations?.length || 0}</span>
+    </div>
+  `;
   const citations = payload.citations || [];
   const citationMarkup = citations.length
     ? `
       <div class="chip-row citation-row">
         ${citations
-          .map(
-            (citation) => `
+      .map(
+        (citation) => `
               <span class="chip">
                 ${escapeHtml(citation.label)} ${escapeHtml(citation.title)}
               </span>
             `
-          )
-          .join("")}
+      )
+      .join("")}
       </div>
     `
     : "";
 
   els.answerOutput.classList.remove("empty-state");
   els.answerOutput.innerHTML = `
-    <div class="chip-row">
-      <span class="chip">Mode: ${escapeHtml(payload.mode)}</span>
-      <span class="chip">Filters: ${escapeHtml(payload.filters?.role || "all")} / ${escapeHtml(payload.filters?.location || "all")} / ${escapeHtml(payload.filters?.stage || "all")}</span>
-    </div>
+    ${metaMarkup}
     <pre class="output-pre">${escapeHtml(payload.answer || "")}</pre>
     ${citationMarkup}
   `;
@@ -507,15 +535,14 @@ function renderInterviewQuestions(payload) {
 
   els.interviewQuestions.classList.remove("empty-state");
   els.interviewQuestions.innerHTML = `
-    <div class="chip-row">
-      <span class="chip">Candidate: ${escapeHtml(payload.candidate?.name || "Selected candidate")}</span>
-      <span class="chip">Job: ${escapeHtml(payload.job?.title || "Selected role")}</span>
-      <span class="chip">Rubric: technical / communication / confidence / fraud</span>
+    <div class="session-banner">
+      <div class="pulse-indicator"></div>
+      <span>Live Session: <strong>${escapeHtml(payload.candidate?.name)}</strong> for <strong>${escapeHtml(payload.job?.title)}</strong></span>
     </div>
     <div class="question-list-inner">
       ${(payload.questions || [])
-        .map(
-          (question, index) => `
+      .map(
+        (question, index) => `
             <article class="question-card">
               <div class="question-head">
                 <div>
@@ -534,8 +561,8 @@ function renderInterviewQuestions(payload) {
               </label>
             </article>
           `
-        )
-        .join("")}
+      )
+      .join("")}
     </div>
   `;
 
@@ -545,12 +572,14 @@ function renderInterviewQuestions(payload) {
 function renderInterviewResult(payload) {
   els.interviewResult.classList.remove("empty-state");
   els.interviewResult.innerHTML = `
-    <div class="chip-row">
-      <span class="chip">Overall ${escapeHtml(Number(payload.overall_score || 0).toFixed(1))}</span>
-      <span class="chip">Technical ${escapeHtml(Number(payload.technical_score || 0).toFixed(1))}</span>
-      <span class="chip">Communication ${escapeHtml(Number(payload.communication_score || 0).toFixed(1))}</span>
-      <span class="chip">Confidence ${escapeHtml(Number(payload.confidence_score || 0).toFixed(1))}</span>
-      <span class="chip ${payload.fraud_score >= 60 ? "chip-warning" : ""}">Fraud risk ${escapeHtml(Number(payload.fraud_score || 0).toFixed(1))}</span>
+    <div class="intelligence-report">
+      <div class="report-header">Intelligence Dossier</div>
+      <div class="advanced-score-grid">
+        ${renderScoreBar("Overall Match", payload.overall_score)}
+        ${renderScoreBar("Technical Mastery", payload.technical_score)}
+        ${renderScoreBar("Communication", payload.communication_score)}
+        ${renderScoreBar("Confidence", payload.confidence_score)}
+      </div>
     </div>
     <ul class="bullet-list">
       ${(payload.reasons || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
@@ -586,29 +615,31 @@ function renderTelemetryPanel() {
     ? Number(state.lastFraudResult.fraud_score).toFixed(1)
     : "n/a";
   els.telemetryPanel.innerHTML = `
-    <div class="telemetry-card">
-      <span class="metric-label">Tab switches</span>
-      <strong>${telemetry.tab_switches}</strong>
-    </div>
-    <div class="telemetry-card">
-      <span class="metric-label">Copy / paste</span>
-      <strong>${telemetry.copy_events} / ${telemetry.paste_events}</strong>
-    </div>
-    <div class="telemetry-card">
-      <span class="metric-label">Blur events</span>
-      <strong>${telemetry.blur_events}</strong>
-    </div>
-    <div class="telemetry-card">
-      <span class="metric-label">Idle seconds</span>
-      <strong>${Math.max(0, Math.round(telemetry.idle_seconds))}</strong>
-    </div>
-    <div class="telemetry-card">
-      <span class="metric-label">Multiple faces</span>
-      <strong>${telemetry.multiple_faces_detected ? "flagged" : "clear"}</strong>
-    </div>
-    <div class="telemetry-card">
-      <span class="metric-label">Last fraud check</span>
-      <strong>${lastRisk}</strong>
+    <div class="telemetry-grid">
+      <div class="telemetry-card ${telemetry.tab_switches > 2 ? 'warning' : ''}">
+        <span class="metric-label">TAB ESCAPES</span>
+        <strong>${telemetry.tab_switches}</strong>
+      </div>
+      <div class="telemetry-card ${telemetry.paste_events > 1 ? 'warning' : ''}">
+        <span class="metric-label">BUFFER INJECTION (P)</span>
+        <strong>${telemetry.paste_events}</strong>
+      </div>
+      <div class="telemetry-card">
+        <span class="metric-label">FOCUS LOSS</span>
+        <strong>${telemetry.blur_events}</strong>
+      </div>
+      <div class="telemetry-card">
+        <span class="metric-label">IDLE LATENCY</span>
+        <strong>${Math.max(0, Math.round(telemetry.idle_seconds))}s</strong>
+      </div>
+      <div class="telemetry-card ${telemetry.multiple_faces_detected ? 'danger' : ''}">
+        <span class="metric-label">VISION FLAGS</span>
+        <strong>${telemetry.multiple_faces_detected ? "DETECTED" : "NULL"}</strong>
+      </div>
+      <div class="telemetry-card integrity-score">
+        <span class="metric-label">INTEGRITY INDEX</span>
+        <strong>${lastRisk}</strong>
+      </div>
     </div>
   `;
 }
@@ -829,46 +860,33 @@ async function uploadResume(event) {
     })
   );
 
-  const formData = new FormData();
-  for (const file of files) {
-    formData.append("files", file);
-  }
-  formData.append("name", els.candidateName.value || "");
-  formData.append("target_role", els.candidateTargetRole.value || "AI Engineer");
-  formData.append("location", els.candidateLocation.value || "Remote");
-  formData.append("stage", els.candidateStage.value || "screening");
-  formData.append("source_prefix", els.uploadSourcePrefix.value || "candidates");
-
-  // Backwards-compatible fields (backend accepts them too).
-  formData.append("title", "");
-  formData.append("department", els.candidateTargetRole.value || "all");
-  formData.append("doc_type", "candidate_resume");
-  formData.append("audience", els.candidateStage.value || "screening");
-
-  const response = await fetch("/api/upload", {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({}));
-    throw new Error(errorPayload?.detail || response.statusText);
-  }
-
-  const result = await response.json();
-  showToast(`${result.message} (${result.uploaded_chunks} resumes indexed)`);
-
-  const baseCandidate = {
-    candidate_id: null,
-    name: (els.candidateName.value || "Anonymous Candidate").trim(),
-    headline: "",
-    target_role: (els.candidateTargetRole.value || "").trim(),
+  const fileArray = Array.from(files);
+  const payload = {
+    files: fileArray.map((file, i) => ({
+      filename: file.name,
+      content: fileTexts[i]
+    })),
+    name: (els.candidateName.value || "").trim(),
+    target_role: (els.candidateTargetRole.value || "AI Engineer").trim(),
     years_experience: clampNumber(els.candidateYears.value, 0),
     location: (els.candidateLocation.value || "Remote").trim(),
     skills: splitList(els.candidateSkills.value || ""),
-    resume_text: fileTexts.join("\n\n").trim(),
-    source: `${els.uploadSourcePrefix.value || "candidates"}/upload`,
-    stage: els.candidateStage.value || "screening",
+    source_prefix: (els.uploadSourcePrefix.value || "candidates").trim(),
+    stage: els.candidateStage.value || "screening"
+  };
+
+  const result = await postJson("/api/upload", payload);
+  showToast(`${result.message} (${result.uploaded_chunks} resumes indexed)`);
+
+  const baseCandidate = {
+    name: payload.name || "Anonymous Candidate",
+    headline: "",
+    target_role: payload.target_role,
+    years_experience: payload.years_experience,
+    location: payload.location,
+    skills: payload.skills,
+    stage: payload.stage,
+    resume_text: fileTexts.join("\n\n").trim()
   };
 
   if (result.candidate_ids?.length) {
@@ -876,8 +894,9 @@ async function uploadResume(event) {
       const snapshot = {
         ...baseCandidate,
         candidate_id: id,
+        id: id,
         resume_text: (fileTexts[index] || baseCandidate.resume_text || "").trim(),
-        source: `${els.uploadSourcePrefix.value || "candidates"}/${Array.from(files)[index]?.name || "upload"}`,
+        source: `${payload.source_prefix}/${fileArray[index]?.name || "upload"}`,
       };
       state.candidates = upsertById(state.candidates, snapshot, "candidate_id");
     });
@@ -889,20 +908,6 @@ async function uploadResume(event) {
   if (result.candidate_ids?.length) {
     selectCandidate(result.candidate_ids[0]);
   }
-}
-
-function jobSnapshotFromForm() {
-  return {
-    job_id: null,
-    title: els.jobTitle.value.trim() || "Untitled Role",
-    description: els.jobDescription.value.trim() || "Role description not provided.",
-    department: els.jobDepartment.value.trim() || "engineering",
-    location: els.jobLocation.value.trim() || "Remote",
-    min_years_experience: clampNumber(els.jobMinYears.value, 0),
-    must_have_skills: splitList(els.jobMustHave.value),
-    nice_to_have_skills: splitList(els.jobNiceHave.value),
-    interview_focus: splitList(els.jobFocus.value),
-  };
 }
 
 async function createJob() {
@@ -954,7 +959,7 @@ async function requestInterviewPlan() {
     return;
   }
 
-  const payload = await postJson("/api/interview/plan", {
+  const payload = await postJson("/api/interview/questions", {
     candidate,
     job,
     num_questions: Number(els.interviewCount.value),
@@ -1009,7 +1014,7 @@ async function requestResumeFeedback(candidateOverride = null, jobOverride = nul
     showToast("Choose a candidate and job first.", "error");
     return;
   }
-  const payload = await postJson("/api/resume/feedback", {
+  const payload = await postJson("/api/resume-feedback", {
     candidate,
     job,
   });
@@ -1018,7 +1023,7 @@ async function requestResumeFeedback(candidateOverride = null, jobOverride = nul
 }
 
 async function requestFraudScore() {
-  const payload = await postJson("/api/fraud/score", {
+  const payload = await postJson("/api/fraud-score", {
     telemetry: {
       ...state.telemetry,
       multiple_faces_detected: els.multipleFaces.checked,
@@ -1026,6 +1031,50 @@ async function requestFraudScore() {
   });
   renderFraudResult(payload);
   showToast(`Fraud check complete: ${payload.label}.`);
+}
+
+async function requestDocumentSummary() {
+  const candidate = candidateSnapshotFromState(getSelectedCandidate());
+  if (!candidate) {
+    showToast("Choose a document first.", "error");
+    return;
+  }
+  els.documentSummary.innerHTML = "Generating summary...";
+  const payload = await postJson("/api/document-summary", {
+    candidate
+  });
+  
+  els.documentSummary.classList.remove("empty-state");
+  els.documentSummary.innerHTML = `
+    <div class="report-header">Executive Summary</div>
+    <p class="insight-summary" style="color: #fff; font-size: 1.05rem;">${escapeHtml(payload.summary || "")}</p>
+  `;
+  showToast("Generated executive summary.");
+}
+
+async function downloadCsv(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.detail || "Failed to export CSV");
+  }
+
+  const blob = await response.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.style.display = "none";
+  a.href = downloadUrl;
+  a.download = "document_export.csv";
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(downloadUrl);
+  a.remove();
+  showToast("CSV Exported Successfully.");
 }
 
 function loadSamplePrompt() {
@@ -1200,9 +1249,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  els.fraudCheckButton.addEventListener("click", async () => {
+  els.generateSummaryButton.addEventListener("click", async () => {
     try {
-      await requestFraudScore();
+      await requestDocumentSummary();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.exportSearchCsvButton?.addEventListener("click", async () => {
+    try {
+      await downloadCsv("/api/export-csv", { docs: state.candidates });
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.exportRankCsvButton?.addEventListener("click", async () => {
+    try {
+      await downloadCsv("/api/export-csv", { docs: state.candidates });
     } catch (error) {
       showToast(error.message, "error");
     }
