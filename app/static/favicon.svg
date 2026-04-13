@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Endee Atlas">
+  <defs>
+    <linearGradient id="g" x1="10" y1="10" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00f3ff"/>
+      <stop offset="0.55" stop-color="#ff7b54"/>
+      <stop offset="1" stop-color="#b829e3"/>
+    </linearGradient>
+    <filter id="s" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="44" height="44" rx="14" fill="#070812" stroke="rgba(255,255,255,0.18)"/>
+  <path d="M22 39c0-10 8-18 18-18" fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round" filter="url(#s)"/>
+  <path d="M42 25c0 10-8 18-18 18" fill="none" stroke="url(#g)" stroke-width="6" stroke-linecap="round" opacity="0.85" filter="url(#s)"/>
+  <circle cx="40" cy="21" r="3.2" fill="#00f3ff"/>
+  <circle cx="24" cy="43" r="3.2" fill="#ff7b54"/>
+</svg>
+

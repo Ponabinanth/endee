@@ -4,10 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }}</title>
+  <meta name="description" content="Endee Atlas: semantic search, explainable ranking, interview workflows, and grounded answers over your documents.">
+  <meta name="theme-color" content="#050507">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <script defer src="/static/app.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
   <div class="noise"></div>
@@ -15,11 +19,15 @@
   <div class="app-shell">
     <header class="hero panel">
       <div class="hero-copy">
-        <div class="eyebrow">Endee-powered semantic intelligence studio</div>
-        <h1>{{ app_name }}</h1>
-        <p class="hero-subtitle">
-          Connect Endee as the live vector database, index documents semantically, rank evidence with explainable AI, and keep the reconnect path visible so the stack always feels intentional.
-        </p>
+          <div class="eyebrow">Endee-powered semantic intelligence studio</div>
+          <h1>{{ app_name }}</h1>
+          <p class="hero-subtitle">
+            Connect Endee as the live vector store, move from semantic search to shortlist decisions without losing context, and keep every explanation grounded in the source documents.
+          </p>
+        <div class="hero-links" aria-label="Helpful links">
+          <a class="hero-link" href="/docs" target="_blank" rel="noopener">API Docs</a>
+          <a class="hero-link" href="/redoc" target="_blank" rel="noopener">API Reference</a>
+        </div>
         <div class="hero-actions">
           <button class="button button-primary" type="button" id="sample-prompt-button">Load sample prompt</button>
           <button class="button button-secondary" type="button" id="refresh-button">Refresh status</button>
@@ -40,7 +48,7 @@
           <div class="guide-card">
             <span>03</span>
             <strong>Use</strong>
-            <p>Search, rank, interview, and explain decisions from one workspace.</p>
+            <p>Search, shortlist, compare, and interview from one command center.</p>
           </div>
         </div>
         <div id="status-pill" class="status-pill status-pending">Checking vector store...</div>
@@ -70,7 +78,7 @@
       </div>
     </header>
 
-    <main class="dashboard">
+    <main class="dashboard" id="main">
       <section class="panel intake-panel">
         <div class="section-head">
           <div>
@@ -300,6 +308,68 @@
 
         <div id="comparison-output" class="answer-output empty-state">
           Pick two candidates and a role to generate a head-to-head decision brief.
+        </div>
+      </section>
+
+      <section class="panel workspace-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Decision memory</p>
+            <h2>Pin a shortlist and read the signal map</h2>
+          </div>
+          <span class="section-badge">Saved locally</span>
+        </div>
+
+        <div class="workspace-toolbar">
+          <button class="button button-primary" type="button" id="shortlist-pin-top">Pin top matches</button>
+          <button class="button button-secondary" type="button" id="shortlist-compare">Compare shortlist</button>
+          <button class="button button-secondary" type="button" id="export-shortlist-csv">Export shortlist</button>
+          <button class="button button-ghost" type="button" id="shortlist-clear">Clear shortlist</button>
+        </div>
+
+        <div class="workspace-layout">
+          <aside class="workspace-overview">
+            <div class="workspace-stat-grid">
+              <article class="workspace-stat">
+                <span>Pinned</span>
+                <strong id="shortlist-count">0</strong>
+                <small>candidates</small>
+              </article>
+              <article class="workspace-stat">
+                <span>Average years</span>
+                <strong id="shortlist-average-years">0.0</strong>
+                <small>years of experience</small>
+              </article>
+              <article class="workspace-stat">
+                <span>Best fit</span>
+                <strong id="shortlist-best-fit">n/a</strong>
+                <small id="shortlist-best-fit-score">No shortlist yet</small>
+              </article>
+              <article class="workspace-stat workspace-stat-accent">
+                <span>Coverage</span>
+                <strong id="shortlist-coverage">0%</strong>
+                <small id="shortlist-coverage-note">matched to the selected role</small>
+              </article>
+            </div>
+
+            <div id="shortlist-summary" class="workspace-summary">
+              Pin candidates from search or ranking to build a living shortlist and watch the signal map update.
+            </div>
+
+            <div class="workspace-signal-group">
+              <p class="comparison-label">Skill concentration</p>
+              <div id="shortlist-skill-map" class="skill-matrix"></div>
+            </div>
+
+            <div class="workspace-signal-group">
+              <p class="comparison-label">Location spread</p>
+              <div id="shortlist-location-map" class="chip-row"></div>
+            </div>
+          </aside>
+
+          <div id="shortlist-results" class="results-list empty-state">
+            Pin candidates from search, ranking, or comparison to build a shortlist.
+          </div>
         </div>
       </section>
 

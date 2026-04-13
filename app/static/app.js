@@ -8,7 +8,9 @@ const state = {
   jobs: [],
   lastSearchResults: [],
   lastRankResults: [],
+  lastRelatedResults: [],
   lastComparison: null,
+  shortlist: [],
   selectedCandidateId: "",
   selectedJobId: "",
   compareCandidateAId: "",
@@ -32,6 +34,7 @@ const STORAGE_KEYS = {
   candidates: "smartdoc.candidates.v1",
   jobs: "smartdoc.jobs.v1",
   comparison: "smartdoc.comparison.v1",
+  shortlist: "smartdoc.shortlist.v1",
 };
 
 const els = {
@@ -98,6 +101,7 @@ const els = {
   resetInterviewButton: document.getElementById("reset-interview-button"),
   exportSearchCsvButton: document.getElementById("export-search-csv"),
   exportRankCsvButton: document.getElementById("export-rank-csv"),
+  exportShortlistCsvButton: document.getElementById("export-shortlist-csv"),
   documentSummary: document.getElementById("document-summary"),
   compareCandidateA: document.getElementById("compare-candidate-a"),
   compareCandidateB: document.getElementById("compare-candidate-b"),
@@ -106,6 +110,19 @@ const els = {
   compareUseTopTwoButton: document.getElementById("compare-use-top-two"),
   compareClearButton: document.getElementById("compare-clear-button"),
   comparisonOutput: document.getElementById("comparison-output"),
+  shortlistPinTopButton: document.getElementById("shortlist-pin-top"),
+  shortlistCompareButton: document.getElementById("shortlist-compare"),
+  shortlistClearButton: document.getElementById("shortlist-clear"),
+  shortlistCount: document.getElementById("shortlist-count"),
+  shortlistAverageYears: document.getElementById("shortlist-average-years"),
+  shortlistBestFit: document.getElementById("shortlist-best-fit"),
+  shortlistBestFitScore: document.getElementById("shortlist-best-fit-score"),
+  shortlistCoverage: document.getElementById("shortlist-coverage"),
+  shortlistCoverageNote: document.getElementById("shortlist-coverage-note"),
+  shortlistSummary: document.getElementById("shortlist-summary"),
+  shortlistSkillMap: document.getElementById("shortlist-skill-map"),
+  shortlistLocationMap: document.getElementById("shortlist-location-map"),
+  shortlistResults: document.getElementById("shortlist-results"),
   interviewCandidate: document.getElementById("interview-candidate"),
   interviewJob: document.getElementById("interview-job"),
   searchRole: document.getElementById("search-role"),
@@ -273,6 +290,107 @@ function jobLabel(job) {
   return `${job.title || "Job"} | ${job.location || "Remote"}`;
 }
 
+function normalizeKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function formatPinnedDate(value) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+function truncateText(value, limit = 220) {
+  const text = String(value || "").trim();
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit).trimEnd()}…`;
+}
+
+function shortlistSnapshotFromResult(result, sourceKind = "search") {
+  const rawScore = clampNumber(result?.overall_score ?? result?.score ?? 0, 0);
+  const score = result?.overall_score != null
+    ? rawScore
+    : rawScore <= 1
+      ? rawScore * 100
+      : rawScore;
+  const scoreLabel = result?.score_label
+    || result?.match_label
+    || `Match ${score.toFixed(1)}/100`;
+  const text = result?.text || result?.resume_text || result?.excerpt || "";
+
+  return {
+    candidate_id: result?.id || result?.candidate_id || "",
+    id: result?.id || result?.candidate_id || "",
+    name: result?.name || "Candidate",
+    headline: result?.headline || "",
+    target_role: result?.target_role || "",
+    years_experience: clampNumber(result?.years_experience, 0),
+    location: result?.location || "",
+    skills: Array.isArray(result?.skills) ? result.skills : [],
+    resume_text: text,
+    text,
+    excerpt: result?.excerpt || truncateText(text, 220),
+    source: result?.source || "",
+    stage: result?.stage || "screening",
+    score,
+    score_label: scoreLabel,
+    similarity_label: result?.similarity_label || scoreLabel,
+    match_label: result?.match_label || scoreLabel,
+    source_kind: sourceKind,
+    pinned_at: result?.pinned_at || new Date().toISOString(),
+    reasons: Array.isArray(result?.reasons) ? result.reasons : [],
+    score_breakdown: result?.score_breakdown || {},
+  };
+}
+
+function saveShortlistState() {
+  saveToStorage(STORAGE_KEYS.shortlist, state.shortlist);
+}
+
+function restoreShortlistState() {
+  state.shortlist = loadFromStorage(STORAGE_KEYS.shortlist, []);
+}
+
+function isShortlisted(id) {
+  return state.shortlist.some((item) => (item.candidate_id || item.id) === id);
+}
+
+function mergeCandidateRecord(candidate) {
+  if (!candidate) {
+    return null;
+  }
+  const id = candidate.candidate_id || candidate.id || "";
+  const current = getCandidateRecordById(id);
+  const merged = current ? { ...current, ...candidate } : { ...candidate };
+  merged.candidate_id = id;
+  merged.id = id;
+  merged.resume_text = candidate.resume_text || candidate.text || candidate.excerpt || current?.resume_text || current?.text || "";
+  merged.text = candidate.text || candidate.resume_text || candidate.excerpt || current?.text || current?.resume_text || "";
+  return merged;
+}
+
+function sortShortlistRecords(items) {
+  return [...items].sort((left, right) => {
+    const scoreDelta = clampNumber(right.score, 0) - clampNumber(left.score, 0);
+    if (scoreDelta) {
+      return scoreDelta;
+    }
+    const leftPinned = new Date(left.pinned_at || 0).getTime();
+    const rightPinned = new Date(right.pinned_at || 0).getTime();
+    return rightPinned - leftPinned;
+  });
+}
+
 function populateEntitySelect(select, items, labelFn, { emptyLabel, placeholder = "Select..." } = {}) {
   const currentValue = select.value;
   select.innerHTML = "";
@@ -327,6 +445,9 @@ function renderEmpty(target, message) {
 }
 
 function formatSimilarity(result, kind) {
+  if (kind === "shortlist") {
+    return result.score_label || result.match_label || result.similarity_label || `Match ${clampNumber(result.overall_score ?? result.score, 0).toFixed(1)}/100`;
+  }
   if (kind === "rank") {
     return result.match_label || `Match ${clampNumber(result.overall_score, 0).toFixed(1)}/100`;
   }
@@ -412,7 +533,7 @@ function candidateSnapshotFromResult(result) {
     years_experience: clampNumber(result.years_experience, 0),
     location: result.location || "",
     skills: result.skills || [],
-    resume_text: result.text || result.excerpt || "",
+    resume_text: result.text || result.resume_text || result.excerpt || "",
     source: result.source || "",
     stage: "screening",
   };
@@ -445,7 +566,9 @@ function candidateSnapshotFromState(candidate) {
 }
 
 function getCandidateRecordById(id) {
-  return state.candidates.find((candidate) => (candidate.candidate_id || candidate.id) === id) || null;
+  return state.candidates.find((candidate) => (candidate.candidate_id || candidate.id) === id)
+    || state.shortlist.find((candidate) => (candidate.candidate_id || candidate.id) === id)
+    || null;
 }
 
 function getJobRecordById(id) {
@@ -581,6 +704,8 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
       target,
       kind === "related"
         ? "No similar candidates matched this profile."
+        : kind === "shortlist"
+          ? "Pin candidates from search or ranking to build your shortlist."
         : kind === "rank"
           ? "No candidates matched this role yet."
           : "No candidates matched this search."
@@ -588,11 +713,28 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
     return;
   }
 
-  for (const result of results) {
+  for (const [index, result] of results.entries()) {
     const card = document.createElement("article");
     card.className = "result-card";
+    if (kind === "shortlist") {
+      card.classList.add("shortlist-card");
+      if (index === 0) {
+        card.classList.add("shortlist-card-leader");
+      }
+    }
     const scoreLabel = formatSimilarity(result, kind);
-    const scoreClass = kind === "rank" ? "result-score result-score-rank" : "result-score";
+    const scoreClass = kind === "rank" || kind === "shortlist" ? "result-score result-score-rank" : "result-score";
+    const shortlisted = isShortlisted(result.id || result.candidate_id);
+    const extraMeta = [];
+    if (kind === "shortlist" && result.source_kind) {
+      extraMeta.push(`<span class="chip chip-outline">${escapeHtml(humanize(result.source_kind))}</span>`);
+    }
+    if (kind === "shortlist" && result.pinned_at) {
+      extraMeta.push(`<span class="chip chip-outline">Pinned ${escapeHtml(formatPinnedDate(result.pinned_at))}</span>`);
+    }
+    if (kind === "shortlist" && index === 0) {
+      extraMeta.push(`<span class="chip chip-outline">Top pick</span>`);
+    }
     card.innerHTML = `
       <div class="result-top">
         <div>
@@ -606,18 +748,20 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
             <span class="chip chip-outline">${escapeHtml(result.location || "n/a")}</span>
             <span class="chip">${escapeHtml(Number(result.years_experience || 0).toFixed(1))} yrs</span>
             <span class="chip">${escapeHtml((result.skills || []).slice(0, 4).join(", ") || "skills n/a")}</span>
+            ${extraMeta.join("")}
           </div>
         </div>
         <span class="${scoreClass}">${escapeHtml(scoreLabel)}</span>
       </div>
-      <p class="result-excerpt">${escapeHtml(result.excerpt || result.text || "")}</p>
-      ${kind === "rank" ? renderScoreBreakdown(result.score_breakdown) : ""}
+      <p class="result-excerpt">${escapeHtml(result.excerpt || result.text || result.resume_text || "")}</p>
+      ${(kind === "rank" || kind === "shortlist") ? renderScoreBreakdown(result.score_breakdown) : ""}
       ${renderReasons(result.reasons)}
       <div class="card-actions">
         <button type="button" class="button button-secondary" data-action="select">Use in interview</button>
         <button type="button" class="button button-secondary" data-action="related">Find related</button>
         <button type="button" class="button button-secondary" data-action="compare-a">Set as A</button>
         <button type="button" class="button button-secondary" data-action="compare-b">Set as B</button>
+        <button type="button" class="button ${shortlisted ? "button-shortlist-active" : "button-ghost"}" data-action="shortlist-toggle">${shortlisted ? "Unpin shortlist" : "Pin shortlist"}</button>
         <button type="button" class="button button-ghost" data-action="feedback">Resume feedback</button>
       </div>
     `;
@@ -632,7 +776,7 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
 
     card.querySelector('[data-action="related"]').addEventListener("click", async () => {
       try {
-        await requestRelated(result.text || "", readFilterValues("search"), topKValue("search"));
+        await requestRelated(result.text || result.resume_text || result.excerpt || "", readFilterValues("search"), topKValue("search"));
       } catch (error) {
         showToast(error.message, "error");
       }
@@ -652,6 +796,14 @@ function renderCandidateCards(results, target, { kind = "search" } = {}) {
 
     card.querySelector('[data-action="compare-b"]').addEventListener("click", () => {
       setComparisonCandidate("b", result);
+    });
+
+    card.querySelector('[data-action="shortlist-toggle"]').addEventListener("click", async () => {
+      try {
+        await toggleShortlistCandidate(result, kind);
+      } catch (error) {
+        showToast(error.message, "error");
+      }
     });
 
     target.appendChild(card);
@@ -934,6 +1086,240 @@ function renderComparison(payload) {
   `;
 }
 
+function buildShortlistInsights(shortlist) {
+  const job = jobSnapshotFromState(getSelectedJob()) || jobSnapshotFromForm();
+  const jobSkills = splitList([...(job.must_have_skills || []), ...(job.nice_to_have_skills || [])].join(","));
+  const jobSkillSet = new Set(jobSkills.map(normalizeKey).filter(Boolean));
+  const skillCounts = new Map();
+  const locationCounts = new Map();
+  const roleCounts = new Map();
+  const coveredSkills = new Set();
+  let totalYears = 0;
+  let totalScore = 0;
+  let bestCandidate = null;
+
+  for (const item of shortlist) {
+    totalYears += clampNumber(item.years_experience, 0);
+    totalScore += clampNumber(item.score, 0);
+    if (!bestCandidate || clampNumber(item.score, 0) > clampNumber(bestCandidate.score, 0)) {
+      bestCandidate = item;
+    }
+
+    const roleKey = normalizeKey(item.target_role || item.headline || "candidate");
+    const roleEntry = roleCounts.get(roleKey) || { label: item.target_role || item.headline || "Candidate", count: 0 };
+    roleEntry.count += 1;
+    roleCounts.set(roleKey, roleEntry);
+
+    const locationKey = normalizeKey(item.location || "Remote");
+    const locationEntry = locationCounts.get(locationKey) || { label: item.location || "Remote", count: 0 };
+    locationEntry.count += 1;
+    locationCounts.set(locationKey, locationEntry);
+
+    const seenSkillKeys = new Set();
+    for (const skill of item.skills || []) {
+      const key = normalizeKey(skill);
+      if (!key) {
+        continue;
+      }
+      const skillEntry = skillCounts.get(key) || { label: skill, count: 0 };
+      skillEntry.count += 1;
+      skillEntry.label = skillEntry.label || skill;
+      skillCounts.set(key, skillEntry);
+      seenSkillKeys.add(key);
+    }
+
+    for (const key of seenSkillKeys) {
+      if (jobSkillSet.has(key)) {
+        coveredSkills.add(key);
+      }
+    }
+  }
+
+  const topSkills = [...skillCounts.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)).slice(0, 5);
+  const topLocations = [...locationCounts.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)).slice(0, 3);
+  const topRoles = [...roleCounts.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)).slice(0, 3);
+  const averageYears = shortlist.length ? totalYears / shortlist.length : 0;
+  const averageScore = shortlist.length ? totalScore / shortlist.length : 0;
+  const coverage = jobSkillSet.size ? (coveredSkills.size / jobSkillSet.size) * 100 : 0;
+
+  const bestScoreLabel = bestCandidate
+    ? bestCandidate.score_label || bestCandidate.match_label || bestCandidate.similarity_label || `Score ${clampNumber(bestCandidate.score, 0).toFixed(1)}`
+    : "No shortlist yet";
+  const leadSkill = topSkills[0]?.label || "No dominant skill yet";
+  const leadLocation = topLocations[0]?.label || "No location pattern yet";
+  const leadRole = topRoles[0]?.label || "No dominant role yet";
+
+  const summary = shortlist.length
+    ? `The shortlist holds ${shortlist.length} candidate${shortlist.length === 1 ? "" : "s"} and averages ${averageYears.toFixed(1)} years of experience. It currently covers ${coverage.toFixed(0)}% of the selected role's skills, with ${leadSkill} and ${leadLocation} standing out across the pinned set.`
+    : "Pin candidates from search or ranking to build a living shortlist and watch the signal map update.";
+
+  return {
+    job,
+    bestCandidate,
+    bestScoreLabel,
+    topSkills,
+    topLocations,
+    topRoles,
+    averageYears,
+    averageScore,
+    coverage,
+    coverageNote: jobSkillSet.size ? `${coveredSkills.size} of ${jobSkillSet.size} job skills covered` : "No job skill baseline yet",
+    leadSkill,
+    leadLocation,
+    leadRole,
+    summary,
+  };
+}
+
+function renderShortlistPanel() {
+  const shortlist = sortShortlistRecords(state.shortlist.map(mergeCandidateRecord).filter(Boolean));
+  const insights = buildShortlistInsights(shortlist);
+
+  els.shortlistCount.textContent = String(shortlist.length);
+  els.shortlistAverageYears.textContent = shortlist.length ? insights.averageYears.toFixed(1) : "0.0";
+  els.shortlistBestFit.textContent = insights.bestCandidate?.name || "n/a";
+  els.shortlistBestFitScore.textContent = shortlist.length
+    ? `${insights.bestScoreLabel} • ${humanize(insights.bestCandidate?.source_kind || "saved")}`
+    : "No shortlist yet";
+  els.shortlistCoverage.textContent = `${insights.coverage.toFixed(0)}%`;
+  if (els.shortlistCoverageNote) {
+    els.shortlistCoverageNote.textContent = insights.coverageNote;
+  }
+
+  els.shortlistSummary.classList.remove("empty-state");
+  els.shortlistSummary.innerHTML = `
+    <p class="insight-summary">${escapeHtml(insights.summary)}</p>
+    <div class="chip-row">
+      <span class="chip">${escapeHtml(insights.leadSkill)}</span>
+      <span class="chip">${escapeHtml(insights.leadLocation)}</span>
+      <span class="chip">${escapeHtml(insights.leadRole)}</span>
+      <span class="chip">Avg score ${escapeHtml(insights.averageScore.toFixed(1))}</span>
+    </div>
+  `;
+
+  if (insights.topSkills.length) {
+    const topSkillCount = Math.max(...insights.topSkills.map((item) => item.count), 1);
+    els.shortlistSkillMap.innerHTML = `
+      ${insights.topSkills
+        .map(
+          (skill) => `
+            <div class="skill-matrix-row">
+              <div class="skill-matrix-label">${escapeHtml(skill.label)}</div>
+              <div class="skill-matrix-track">
+                <span style="width: ${Math.max(18, (skill.count / topSkillCount) * 100).toFixed(0)}%"></span>
+              </div>
+              <div class="skill-matrix-count">${escapeHtml(skill.count)}</div>
+            </div>
+          `
+        )
+        .join("")}
+    `;
+  } else {
+    els.shortlistSkillMap.innerHTML = `<p class="empty-copy">No pinned skills yet. Add a few candidates to see the pattern.</p>`;
+  }
+
+  if (insights.topLocations.length) {
+    els.shortlistLocationMap.innerHTML = insights.topLocations
+      .map((location) => `<span class="chip chip-outline">${escapeHtml(location.label)} <span class="chip-count">×${escapeHtml(location.count)}</span></span>`)
+      .join("");
+  } else {
+    els.shortlistLocationMap.innerHTML = `<span class="chip chip-outline">No location pattern yet</span>`;
+  }
+
+  renderCandidateCards(shortlist, els.shortlistResults, { kind: "shortlist" });
+}
+
+function refreshVisibleCandidateViews() {
+  if (state.lastSearchResults.length) {
+    renderCandidateCards(state.lastSearchResults, els.searchResults, { kind: "search" });
+  }
+  if (state.lastRankResults.length) {
+    renderCandidateCards(state.lastRankResults, els.rankResults, { kind: "rank" });
+  }
+  if (state.lastRelatedResults.length) {
+    renderCandidateCards(state.lastRelatedResults, els.relatedResults, { kind: "related" });
+  }
+}
+
+function upsertShortlistCandidate(result, sourceKind = "search") {
+  const snapshot = shortlistSnapshotFromResult(result, sourceKind);
+  if (!snapshot.candidate_id) {
+    return null;
+  }
+  rememberCandidateResult(result);
+  state.shortlist = upsertById(state.shortlist, snapshot, "candidate_id");
+  saveShortlistState();
+  return snapshot;
+}
+
+async function toggleShortlistCandidate(result, sourceKind = "search") {
+  const id = result?.id || result?.candidate_id || "";
+  if (!id) {
+    showToast("This result does not have a stable candidate id yet.", "error");
+    return;
+  }
+
+  if (isShortlisted(id)) {
+    state.shortlist = state.shortlist.filter((item) => (item.candidate_id || item.id) !== id);
+    saveShortlistState();
+    await refreshEntities();
+    refreshVisibleCandidateViews();
+    showToast(`${result.name || "Candidate"} removed from shortlist.`);
+    return;
+  }
+
+  upsertShortlistCandidate(result, sourceKind);
+  await refreshEntities();
+  refreshVisibleCandidateViews();
+  showToast(`${result.name || "Candidate"} added to shortlist.`);
+}
+
+async function pinTopResultsToShortlist() {
+  const source = state.lastRankResults.length ? state.lastRankResults : state.lastSearchResults;
+  if (!source.length) {
+    showToast("Run a search or rank first so there is something to pin.", "error");
+    return;
+  }
+
+  const sourceKind = state.lastRankResults.length ? "rank" : "search";
+  const pinned = [];
+  for (const result of source.slice(0, 3)) {
+    const snapshot = upsertShortlistCandidate(result, sourceKind);
+    if (snapshot) {
+      pinned.push(snapshot);
+    }
+  }
+
+  await refreshEntities();
+  refreshVisibleCandidateViews();
+  showToast(`Pinned ${pinned.length} ${sourceKind === "rank" ? "ranked" : "search"} result${pinned.length === 1 ? "" : "s"} to the shortlist.`);
+}
+
+async function compareShortlistCandidates() {
+  const shortlist = sortShortlistRecords(state.shortlist.map(mergeCandidateRecord).filter(Boolean));
+  if (shortlist.length < 2) {
+    showToast("Pin at least two candidates before comparing the shortlist.", "error");
+    return;
+  }
+
+  state.compareCandidateAId = shortlist[0].candidate_id || shortlist[0].id || "";
+  state.compareCandidateBId = shortlist[1].candidate_id || shortlist[1].id || "";
+  if (!state.compareJobId && state.jobs.length) {
+    state.compareJobId = state.jobs[0].job_id || state.jobs[0].id || "";
+  }
+  populateComparisonControls();
+  await requestComparison();
+  els.comparisonOutput.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function clearShortlist() {
+  state.shortlist = [];
+  saveShortlistState();
+  await refreshEntities();
+  refreshVisibleCandidateViews();
+  showToast("Shortlist cleared.");
+}
+
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
@@ -977,6 +1363,7 @@ function wireRangeCounter(rangeId, outputId) {
 function resetSearchResults() {
   state.lastSearchResults = [];
   state.lastRankResults = [];
+  state.lastRelatedResults = [];
   els.searchResults.innerHTML = "";
   renderEmpty(els.searchResults, "Run a search to surface the most relevant candidates.");
   els.relatedResults.innerHTML = "";
@@ -1083,6 +1470,7 @@ async function refreshEntities() {
   state.selectedCandidateId = els.interviewCandidate.value || "";
   state.selectedJobId = els.interviewJob.value || "";
   populateComparisonControls();
+  renderShortlistPanel();
 }
 
 async function requestSearch() {
@@ -1138,6 +1526,7 @@ async function requestRelated(text, filters, topK) {
     ...filters,
     top_k: topK,
   });
+  state.lastRelatedResults = payload.results || [];
   state.candidates = (payload.results || []).reduce((acc, result) => {
     return upsertById(acc, candidateSnapshotFromResult(result), "candidate_id");
   }, state.candidates);
@@ -1412,7 +1801,14 @@ async function requestComparison() {
 }
 
 function useTopTwoComparison() {
-  const source = state.lastRankResults.length >= 2 ? state.lastRankResults : state.lastSearchResults.length >= 2 ? state.lastSearchResults : state.candidates;
+  const shortlistSource = sortShortlistRecords(state.shortlist.map(mergeCandidateRecord).filter(Boolean));
+  const source = shortlistSource.length >= 2
+    ? shortlistSource
+    : state.lastRankResults.length >= 2
+      ? state.lastRankResults
+      : state.lastSearchResults.length >= 2
+        ? state.lastSearchResults
+        : state.candidates;
   const candidates = comparisonCandidatesFromSource(source);
   if (candidates.length < 2) {
     showToast("Run a search or rank first so there are two candidates to compare.", "error");
@@ -1425,10 +1821,10 @@ function useTopTwoComparison() {
     state.compareJobId = state.jobs[0].job_id || state.jobs[0].id || "";
   }
   populateComparisonControls();
-  showToast("Loaded the top two candidates into the comparison panel.");
+  showToast(shortlistSource.length >= 2 ? "Loaded the shortlist leaders into the comparison panel." : "Loaded the top two candidates into the comparison panel.");
 }
 
-async function downloadCsv(url, body) {
+async function downloadCsv(url, body, filename = "document_export.csv") {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1445,12 +1841,12 @@ async function downloadCsv(url, body) {
   const a = document.createElement("a");
   a.style.display = "none";
   a.href = downloadUrl;
-  a.download = "document_export.csv";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   window.URL.revokeObjectURL(downloadUrl);
   a.remove();
-  showToast("CSV Exported Successfully.");
+  showToast(`Downloaded ${filename}.`);
 }
 
 function loadSamplePrompt() {
@@ -1522,6 +1918,7 @@ async function initialize() {
   populateFilterSelects(state.filters);
   renderPromptChips(state.examples);
   restoreComparisonState();
+  restoreShortlistState();
   wireRangeCounter("search-top-k", "search-top-k-value");
   wireRangeCounter("answer-top-k", "answer-top-k-value");
   wireRangeCounter("interview-count", "interview-count-value");
@@ -1637,7 +2034,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   els.exportSearchCsvButton?.addEventListener("click", async () => {
     try {
-      await downloadCsv("/api/export-csv", { docs: state.lastSearchResults });
+      await downloadCsv("/api/export-csv", { docs: state.lastSearchResults }, "search_results.csv");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1645,7 +2042,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   els.exportRankCsvButton?.addEventListener("click", async () => {
     try {
-      await downloadCsv("/api/export-csv", { docs: state.lastRankResults });
+      await downloadCsv("/api/export-csv", { docs: state.lastRankResults }, "ranked_candidates.csv");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.exportShortlistCsvButton?.addEventListener("click", async () => {
+    try {
+      await downloadCsv("/api/export-csv", { docs: state.shortlist }, "shortlist.csv");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1706,6 +2111,30 @@ document.addEventListener("DOMContentLoaded", () => {
   els.compareClearButton.addEventListener("click", () => {
     resetComparisonPanel();
     showToast("Comparison cleared.");
+  });
+
+  els.shortlistPinTopButton?.addEventListener("click", async () => {
+    try {
+      await pinTopResultsToShortlist();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.shortlistCompareButton?.addEventListener("click", async () => {
+    try {
+      await compareShortlistCandidates();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  });
+
+  els.shortlistClearButton?.addEventListener("click", async () => {
+    try {
+      await clearShortlist();
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   });
 
   for (const button of els.copySearchQueryButtons) {

@@ -77,7 +77,10 @@ class HiringApiTests(unittest.TestCase):
                             "skills": ["Python", "FastAPI"],
                             "source": "resume.txt",
                             "score": 0.93,
+                            "score_label": "Pinned 93/100",
                             "similarity_label": "0.930",
+                            "source_kind": "shortlist",
+                            "pinned_at": "2026-04-13T10:00:00Z",
                             "reasons": ["Strong semantic overlap."],
                         }
                     ]
@@ -91,6 +94,8 @@ class HiringApiTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["name"], "Priya Shah")
             self.assertEqual(rows[0]["skills"], "Python; FastAPI")
+            self.assertEqual(rows[0]["score_label"], "Pinned 93/100")
+            self.assertEqual(rows[0]["source_kind"], "shortlist")
 
             comparison = client.post(
                 "/api/compare",
